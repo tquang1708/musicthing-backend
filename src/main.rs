@@ -1,13 +1,11 @@
 use axum::{
+    http::Method,
     Router,
-    routing::get_service,
-    http::StatusCode
+    routing::get,
 };
+
 use std::net::SocketAddr;
-use tower_http::{
-    services::ServeDir,
-    trace::TraceLayer
-};
+use tower_http::cors::{CorsLayer, Origin};
 
 #[tokio::main]
 async fn main() {
@@ -21,27 +19,21 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     // app routing
-    // routes need full file name including extension
-    // look into this later for removing suffix?
-    // https://github.com/tokio-rs/axum/discussions/446
-    let app = Router::new()
-        .nest(
-            "/",
-            get_service(ServeDir::new("./static")) // file directory: absolute or relative to where `cargo r` is run
-                .handle_error(|e: std::io::Error| async move {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Unhandled internal error: {}", e),
-                    )
-                }),
-        )
-        .layer(TraceLayer::new_for_http());
+    let app = Router::new().route("/api/test", get(handler)).layer(
+        CorsLayer::new()
+            .allow_origin(Origin::exact("http://localhost:3000".parse().unwrap()))
+            .allow_methods(vec![Method::GET]),
+    );
 
     // app
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = SocketAddr::from(([127, 0, 0, 1], 8000));
     tracing::debug!("Listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
         .unwrap();
+}
+
+async fn handler() -> &'static str {
+    ":q!"
 }
