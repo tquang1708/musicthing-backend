@@ -3,13 +3,13 @@
 FROM rust:1.59 as builder
 
 # create an empty rust project, build it then remove source to make dependencies
-RUN USER=root cargo new --bin musicthing
+RUN cargo new --bin musicthing
 WORKDIR ./musicthing
 COPY Cargo.toml Cargo.toml
 RUN cargo build --release
 RUN rm src/*
 
-# copy project's source
+## copy project's source
 COPY . ./
 
 # rebuild
