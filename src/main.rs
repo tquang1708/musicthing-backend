@@ -20,7 +20,7 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     // metadata db connection
-    let db_connection_str = "postgres://postgres:password@localhost".to_string();
+    let db_connection_str = "postgres://postgres:password@localhost/musicthing-metadb".to_string();
     let pool = PgPoolOptions::new()
         .max_connections(5) // move to cfg
         .connect_timeout(Duration::from_secs(3))
@@ -53,7 +53,7 @@ async fn handler() -> &'static str {
 async fn connection_pool_extractor(
     Extension(pool): Extension<PgPool>
 ) -> Result<String, (StatusCode, String)> {
-    sqlx::query_scalar("SELECT 'hello world from pg!'")
+    sqlx::query_scalar("SELECT * FROM track;")
         .fetch_one(&pool)
         .await
         .map_err(internal_error)
