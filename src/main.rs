@@ -1,12 +1,15 @@
 use std::{net::SocketAddr, time::Duration};
 use axum::{
-    http::{Method, StatusCode},
+    http::Method,
     Router,
     routing::get,
     extract::{Extension}
 };
 use tower_http::cors::{CorsLayer, Origin};
-use sqlx::postgres::{PgPool, PgPoolOptions};
+use sqlx::postgres::PgPoolOptions;
+
+use handlers::demo;
+mod handlers;
 
 #[tokio::main]
 async fn main() {
@@ -30,8 +33,8 @@ async fn main() {
 
     // app routing
     let app = Router::new()
-        .route("/api/test", get(handler))
-        .route("/api/db", get(connection_pool_extractor))
+        .route("/api/test", get(demo::basic_handler))
+        .route("/api/db", get(demo::connection_pool_extractor_handler))
         .layer(CorsLayer::new()
             .allow_origin(Origin::exact("http://localhost:3000".parse().unwrap()))
             .allow_methods(vec![Method::GET]))
@@ -44,25 +47,4 @@ async fn main() {
         .serve(app.into_make_service())
         .await
         .unwrap();
-}
-
-async fn handler() -> &'static str {
-    ":q!"
-}
-
-async fn connection_pool_extractor(
-    Extension(pool): Extension<PgPool>
-) -> Result<String, (StatusCode, String)> {
-    sqlx::query_scalar("SELECT * FROM track;")
-        .fetch_one(&pool)
-        .await
-        .map_err(internal_error)
-}
-
-// Utility function for mapping errors into 500 http response
-fn internal_error<E>(err: E) -> (StatusCode, String)
-where
-    E: std::error::Error,
-{
-    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
 }
