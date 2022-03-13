@@ -7,25 +7,32 @@ use axum::{
     routing::get,
     extract::{Extension}
 };
-use tower_http::cors::{CorsLayer, Origin};
+use tower_http::{
+    cors::{CorsLayer, Origin},
+    trace::TraceLayer,
+};
 use sqlx::postgres::PgPoolOptions;
+use tracing_subscriber::{
+    layer::SubscriberExt,
+    util::SubscriberInitExt
+};
 
 mod handlers;
 use handlers::{demo, reload, list, play};
 
 #[tokio::main]
 async fn main() {
-    // set the RUST_LOG env for logging
-    if std::env::var_os("RUST_LOG").is_none() {
-        std::env::set_var(
-            "RUST_LOG",
-            "musicthing=debug,tower_http=debug",
-        )
-    };
-    tracing_subscriber::fmt::init();
+    //set up tracing
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::new(
+            std::env::var("RUST_LOG")
+                .unwrap_or_else(|_| "tower_http=debug".into()),
+        ))
+        .with(tracing_subscriber::fmt::layer())
+        .init();
 
     // metadata db connection
-    let db_connection_str = "postgres://postgres:password@localhost/musicthing-metadb".to_string();
+    let db_connection_str = "postgres://postgres:password@localhost/musicthing-metadb".to_string(); // move to cfg
     let pool = PgPoolOptions::new()
         .max_connections(5) // move to cfg
         .connect_timeout(Duration::from_secs(3))
@@ -44,7 +51,8 @@ async fn main() {
         .layer(CorsLayer::new()
             .allow_origin(Origin::exact("http://localhost:3000".parse().unwrap()))
             .allow_methods(vec![Method::GET]))
-        .layer(Extension(pool));
+        .layer(Extension(pool))
+        .layer(TraceLayer::new_for_http());
     
     // 404 fallback
     let app = app.fallback(handler_404.into_service());
