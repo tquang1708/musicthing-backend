@@ -1,4 +1,8 @@
-use std::{net::SocketAddr, time::Duration};
+use std::{
+    net::SocketAddr,
+    time::Duration,
+    error::Error,
+};
 use axum::{
     http::{Method, StatusCode, Uri},
     handler::Handler,
@@ -18,10 +22,15 @@ use tracing_subscriber::{
 };
 
 mod handlers;
-use handlers::{demo, reload, list, play};
+mod utils;
+
+use crate::{
+    handlers::{demo, reload, list, play},
+    utils::parse_cfg,
+};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     //set up tracing
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
@@ -32,10 +41,11 @@ async fn main() {
         .init();
 
     // metadata db connection
-    let db_connection_str = "postgres://postgres:password@localhost/musicthing-metadb".to_string(); // move to cfg
+    let config = parse_cfg()?;
+    let db_connection_str = config.database_connection_str;
     let pool = PgPoolOptions::new()
-        .max_connections(5) // move to cfg
-        .connect_timeout(Duration::from_secs(3))
+        .max_connections(config.max_db_connections)
+        .connect_timeout(Duration::from_secs(config.db_connection_timeout_seconds))
         .connect(&db_connection_str)
         .await
         .expect("Can't connect to database");
@@ -64,6 +74,8 @@ async fn main() {
         .serve(app.into_make_service())
         .await
         .unwrap();
+
+    Ok(())
 }
 
 async fn handler_404(uri: Uri) -> impl IntoResponse {

@@ -1,0 +1,6 @@
+{
+    "database_connection_str": "postgres://postgres:password@localhost/musicthing-metadb",
+    "max_db_connections": 5,
+    "db_connection_timeout_seconds": 3,
+    "music_directory": "/home/hxhexa/main_stuffs/Courses/2022-1-spring/CS - Plan Project/music-directory"
+}

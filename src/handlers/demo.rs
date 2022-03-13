@@ -4,7 +4,7 @@ use axum::{
 };
 use sqlx::postgres::PgPool;
 
-use crate::handlers::utils;
+use crate::utils;
 
 pub async fn basic_handler() -> &'static str {
     ":q!"
