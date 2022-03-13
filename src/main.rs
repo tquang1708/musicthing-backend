@@ -24,10 +24,7 @@ use tracing_subscriber::{
 mod handlers;
 mod utils;
 
-use crate::{
-    handlers::{demo, reload, list, play},
-    utils::parse_cfg,
-};
+use crate::handlers::{demo, reload, list, play};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -41,7 +38,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .init();
 
     // metadata db connection
-    let config = parse_cfg()?;
+    let config = utils::parse_cfg()?; // load config
     let db_connection_str = config.database_connection_str;
     let pool = PgPoolOptions::new()
         .max_connections(config.max_db_connections)

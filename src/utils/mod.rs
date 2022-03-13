@@ -9,7 +9,7 @@ use std::{
 use serde::{Deserialize};
 use serde_json;
 
-// loading config
+// config struct
 #[derive(Deserialize, Debug)]
 pub struct Config {
     pub database_connection_str: String,
@@ -27,9 +27,6 @@ pub fn parse_cfg() -> Result<Config, Box<dyn Error>> {
 }
 
 // Utility function for mapping errors into 500 http response
-pub fn internal_error<E>(err: E) -> (StatusCode, String)
-where
-    E: std::error::Error,
-{
+pub fn internal_error(err: Box<dyn Error>) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
 }

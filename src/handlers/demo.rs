@@ -16,5 +16,5 @@ pub async fn connection_pool_extractor_handler(
     sqlx::query_scalar("SELECT * FROM track;")
         .fetch_one(&pool)
         .await
-        .map_err(utils::internal_error)
+        .map_err(|e| utils::internal_error(Box::new(e)))
 }
