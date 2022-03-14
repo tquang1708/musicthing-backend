@@ -22,7 +22,7 @@ use crate::utils::{
     internal_error,
 };
 use crate::handlers::{
-    Track,
+    TrackDB,
     RECOGNIZED_EXTENSIONS,
 };
 
@@ -89,7 +89,7 @@ async fn clear_data(pool: PgPool) -> Result<(), Box<dyn Error>> {
 // update old metadata from files that have been changed, or files that have been deleted
 async fn update_old_metadata(pool: PgPool) -> Result<(), Box<dyn Error>> {
     // get all paths
-    let tracks: Vec<Track> = sqlx::query_as("SELECT * FROM track")
+    let tracks = sqlx::query_as!(TrackDB, "SELECT * FROM track")
         .fetch_all(&pool)
         .await?;
 
@@ -275,7 +275,7 @@ async fn add_track_from_info(pool: PgPool, track_info: TrackInfo) -> Result<(), 
 
             // insert into artist_album table
             sqlx::query!("INSERT INTO artist_album (artist_id, album_id) VALUES ($1, $2)",
-                artist_id, album_id)
+                album_artist_id, album_id)
                 .execute(&pool)
                 .await?;
         },
