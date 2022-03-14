@@ -77,7 +77,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app = app.fallback(handler_404.into_service());
 
     // app
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
+    let addr = SocketAddr::from((config.backend_url, config.port));
     tracing::debug!("Listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())

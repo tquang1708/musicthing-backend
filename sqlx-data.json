@@ -53,30 +53,6 @@
     },
     "query": "SELECT (album.album_id) FROM album JOIN artist_album ON (album.album_id = artist_album.album_id) WHERE album_name = ($1) AND artist_id = ($2)"
   },
-  "2cfa375d7e6f236a7fcf06563c8f1813aa33951e7e9f3909c36d4be5bbf24384": {
-    "describe": {
-      "columns": [
-        {
-          "name": "album_id",
-          "ordinal": 0,
-          "type_info": "Int4"
-        },
-        {
-          "name": "album_name",
-          "ordinal": 1,
-          "type_info": "Text"
-        }
-      ],
-      "nullable": [
-        false,
-        true
-      ],
-      "parameters": {
-        "Left": []
-      }
-    },
-    "query": "SELECT album_id, album_name FROM album ORDER BY (album_name)"
-  },
   "51a64f1b12d17cd187504cecb5a507178e5513fded6ef0fd2cf758196f495167": {
     "describe": {
       "columns": [
@@ -314,5 +290,29 @@
       }
     },
     "query": "INSERT INTO artist_album (artist_id, album_id) VALUES ($1, $2)"
+  },
+  "f551bb61bd5d774015b120f55f884d947a28f85697a1f3a99c1cf97a1d31ef39": {
+    "describe": {
+      "columns": [
+        {
+          "name": "album_id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "album_name",
+          "ordinal": 1,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false,
+        true
+      ],
+      "parameters": {
+        "Left": []
+      }
+    },
+    "query": "SELECT DISTINCT album.album_id, album_name FROM album JOIN album_track ON (album.album_id = album_track.album_id)\n        ORDER BY (album_name)"
   }
 }

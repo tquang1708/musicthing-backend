@@ -14,6 +14,8 @@ use serde_json;
 pub struct Config {
     pub database_connection_str: String,
     pub frontend_url: String,
+    pub backend_url: [u8; 4],
+    pub port: u16,
     pub max_db_connections: u32,
     pub db_connection_timeout_seconds: u64,
     pub music_directory: String,
