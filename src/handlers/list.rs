@@ -56,8 +56,10 @@ pub async fn list_handler(
 }
 
 async fn generate_root(pool: PgPool) -> Result<Root, Box<dyn Error>> {
-    // gather all albums sorted alphabetically
-    let albums = sqlx::query_as!(AlbumDB, "SELECT album_id, album_name FROM album ORDER BY (album_name)")
+    // gather all albums with tracks sorted alphabetically
+    let albums = sqlx::query_as!(AlbumDB, "SELECT DISTINCT album.album_id, album_name FROM album \
+        JOIN album_track ON (album.album_id = album_track.album_id)
+        ORDER BY (album_name)")
         .fetch_all(&pool)
         .await?;
     
