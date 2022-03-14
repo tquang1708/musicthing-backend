@@ -8,12 +8,13 @@ use axum::{
     handler::Handler,
     response::{IntoResponse},
     Router,
-    routing::get,
+    routing::{get, get_service},
     extract::{Extension}
 };
 use tower_http::{
     cors::{CorsLayer, Origin},
     trace::TraceLayer,
+    services::ServeDir,
 };
 use sqlx::postgres::PgPoolOptions;
 use tracing_subscriber::{
@@ -25,6 +26,9 @@ mod handlers;
 mod utils;
 
 use crate::handlers::{demo, reload, list, play};
+use crate::utils::{
+    parse_cfg,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -38,7 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .init();
 
     // metadata db connection
-    let config = utils::parse_cfg()?; // load config
+    let config = parse_cfg()?; // load config
     let db_connection_str = config.database_connection_str;
     let pool = PgPoolOptions::new()
         .max_connections(config.max_db_connections)
@@ -55,10 +59,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .route("/api/hard_reload", get(reload::hard_reload_handler))
         .route("/api/list", get(list::list_handler))
         .route("/api/play", get(play::play_handler))
+        .layer(Extension(pool))
+        .nest(
+            "/static",
+            get_service(ServeDir::new(config.music_directory))
+            .handle_error(|e: std::io::Error| async move {(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Unhandled internal error: {}", e),
+            )}),
+        )
         .layer(CorsLayer::new()
             .allow_origin(Origin::exact("http://localhost:3000".parse().unwrap()))
             .allow_methods(vec![Method::GET]))
-        .layer(Extension(pool))
         .layer(TraceLayer::new_for_http());
     
     // 404 fallback

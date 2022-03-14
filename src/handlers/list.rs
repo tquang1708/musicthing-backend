@@ -9,9 +9,15 @@ use serde::{
     Deserialize,
 };
 
-use std::error::Error;
+use std::{
+    error::Error,
+    path::Path
+};
 
-use crate::utils::internal_error;
+use crate::utils::{
+    internal_error,
+    parse_cfg,
+};
 use crate::handlers::{
     AlbumDB,
 };
@@ -39,6 +45,7 @@ pub struct Track {
     pub number: i32,
     pub artist: String,
     pub name: String,
+    pub path: String,
 }
 
 
@@ -67,7 +74,7 @@ async fn generate_root(pool: PgPool) -> Result<Root, Box<dyn Error>> {
         let mut disc_structs = Vec::new();
         for disc in discs.iter() {
             // gather all tracks on disc
-            let tracks = sqlx::query!("SELECT track_no, artist_name, track_name FROM track \
+            let tracks = sqlx::query!("SELECT track_no, artist_name, track_name, path FROM track \
                 JOIN artist_track ON (track.track_id = artist_track.track_id) \
                 JOIN artist ON (artist_track.artist_id = artist.artist_id) \
                 JOIN album_track ON (track.track_id = album_track.track_id) \
@@ -81,6 +88,10 @@ async fn generate_root(pool: PgPool) -> Result<Root, Box<dyn Error>> {
                     number: track.track_no.unwrap_or(0),
                     artist: track.artist_name.clone().unwrap_or("Unknown Artist".to_string()),
                     name: track.track_name.clone().unwrap_or("Untitled".to_string()),
+                    path: Path::new(&track.path)
+                        .strip_prefix(parse_cfg().expect("config.json corrupted or not found").music_directory)
+                        .expect("audio file not part of music directory")
+                        .to_string_lossy().into_owned(),
                 }).collect();
 
             // construct disc_struct
