@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             )}),
         )
         .layer(CorsLayer::new()
-            .allow_origin(Origin::exact("http://localhost:3000".parse().unwrap()))
+            .allow_origin(Origin::exact(config.frontend_url.as_str().parse().expect("failed in parsing frontend url")))
             .allow_methods(vec![Method::GET]))
         .layer(TraceLayer::new_for_http());
     

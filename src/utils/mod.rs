@@ -13,6 +13,7 @@ use serde_json;
 #[derive(Deserialize, Debug)]
 pub struct Config {
     pub database_connection_str: String,
+    pub frontend_url: String,
     pub max_db_connections: u32,
     pub db_connection_timeout_seconds: u64,
     pub music_directory: String,
