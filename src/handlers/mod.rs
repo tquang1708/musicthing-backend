@@ -1,3 +1,5 @@
+use sqlx::types::time::PrimitiveDateTime;
+
 pub mod demo;
 pub mod reload;
 pub mod list;
@@ -9,5 +11,8 @@ pub struct Track {
     track_id: i32,
     track_name: String,
     path: String,
-    checksum: Vec<u8>,
+    last_modified: PrimitiveDateTime,
 }
+
+// constant vector of recognized extensions
+pub const RECOGNIZED_EXTENSIONS: &[&str] = &["mp3", "flac"];
