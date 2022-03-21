@@ -64,18 +64,17 @@ async fn main() -> Result<(), BoxError> {
         .route("/api/list", get(list::list_handler))
         .route("/api/play", get(play::play_handler))
         .layer(Extension(pool))
-        .layer(Extension(SharedState::default()))
-        // .layer(
-        //     ServiceBuilder::new()
-        //     // handle errors from middleware
-        //         .layer(HandleErrorLayer::new(handle_error))
-        //         .load_shed()
-        //         .concurrency_limit(config.max_state_concurrency_limit)
-        //         .timeout(Duration::from_secs(config.state_timeout_seconds))
-        //         .layer(TraceLayer::new_for_http())
-        //         .layer(Extension(SharedState::default()))
-        //         .into_inner(),
-        // )
+        .layer(
+            ServiceBuilder::new()
+            // handle errors from middleware
+                .layer(HandleErrorLayer::new(handle_error))
+                .load_shed()
+                .concurrency_limit(config.max_state_concurrency_limit)
+                .timeout(Duration::from_secs(config.state_timeout_seconds))
+                .layer(TraceLayer::new_for_http())
+                .layer(Extension(SharedState::default()))
+                .into_inner(),
+        )
         .nest(
             "/static",
             get_service(ServeDir::new(config.music_directory))
