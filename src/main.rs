@@ -64,17 +64,18 @@ async fn main() -> Result<(), BoxError> {
         .route("/api/list", get(list::list_handler))
         .route("/api/play", get(play::play_handler))
         .layer(Extension(pool))
-        .layer(
-            ServiceBuilder::new()
-            // handle errors from middleware
-                .layer(HandleErrorLayer::new(handle_error))
-                .load_shed()
-                .concurrency_limit(config.max_state_concurrency_limit)
-                .timeout(Duration::from_secs(config.state_timeout_seconds))
-                .layer(TraceLayer::new_for_http())
-                .layer(Extension(SharedState::default()))
-                .into_inner(),
-        )
+        .layer(Extension(SharedState::default()))
+        // .layer(
+        //     ServiceBuilder::new()
+        //     // handle errors from middleware
+        //         .layer(HandleErrorLayer::new(handle_error))
+        //         .load_shed()
+        //         .concurrency_limit(config.max_state_concurrency_limit)
+        //         .timeout(Duration::from_secs(config.state_timeout_seconds))
+        //         .layer(TraceLayer::new_for_http())
+        //         .layer(Extension(SharedState::default()))
+        //         .into_inner(),
+        // )
         .nest(
             "/static",
             get_service(ServeDir::new(config.music_directory))
@@ -109,21 +110,21 @@ async fn handle_404(uri: Uri) -> impl IntoResponse {
 
 // from axum's kv store example
 // https://github.com/tokio-rs/axum/blob/main/examples/key-value-store/src/main.rs#L54
-async fn handle_error(e: BoxError) -> impl IntoResponse {
-    if e.is::<tower::timeout::error::Elapsed>() {
-        return (
-            StatusCode::REQUEST_TIMEOUT, 
-            Cow::from(format!("request time out. Error: {}", e)));
-    };
+// async fn handle_error(e: BoxError) -> impl IntoResponse {
+//     if e.is::<tower::timeout::error::Elapsed>() {
+//         return (
+//             StatusCode::REQUEST_TIMEOUT, 
+//             Cow::from(format!("request time out. Error: {}", e)));
+//     };
 
-    if e.is::<tower::load_shed::error::Overloaded>() {
-        return (
-            StatusCode::SERVICE_UNAVAILABLE, 
-            Cow::from(format!("service is overloaded. Error: {}", e)));
-    };
+//     if e.is::<tower::load_shed::error::Overloaded>() {
+//         return (
+//             StatusCode::SERVICE_UNAVAILABLE, 
+//             Cow::from(format!("service is overloaded. Error: {}", e)));
+//     };
 
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Cow::from(format!("Internal error: {}", e)),
-    )
-}
+//     (
+//         StatusCode::INTERNAL_SERVER_ERROR,
+//         Cow::from(format!("Internal error: {}", e)),
+//     )
+// }
