@@ -109,21 +109,21 @@ async fn handle_404(uri: Uri) -> impl IntoResponse {
 
 // from axum's kv store example
 // https://github.com/tokio-rs/axum/blob/main/examples/key-value-store/src/main.rs#L54
-// async fn handle_error(e: BoxError) -> impl IntoResponse {
-//     if e.is::<tower::timeout::error::Elapsed>() {
-//         return (
-//             StatusCode::REQUEST_TIMEOUT, 
-//             Cow::from(format!("request time out. Error: {}", e)));
-//     };
+async fn handle_error(e: BoxError) -> impl IntoResponse {
+    if e.is::<tower::timeout::error::Elapsed>() {
+        return (
+            StatusCode::REQUEST_TIMEOUT, 
+            Cow::from(format!("request time out. Error: {}", e)));
+    };
 
-//     if e.is::<tower::load_shed::error::Overloaded>() {
-//         return (
-//             StatusCode::SERVICE_UNAVAILABLE, 
-//             Cow::from(format!("service is overloaded. Error: {}", e)));
-//     };
+    if e.is::<tower::load_shed::error::Overloaded>() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE, 
+            Cow::from(format!("service is overloaded. Error: {}", e)));
+    };
 
-//     (
-//         StatusCode::INTERNAL_SERVER_ERROR,
-//         Cow::from(format!("Internal error: {}", e)),
-//     )
-// }
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Cow::from(format!("Internal error: {}", e)),
+    )
+}
