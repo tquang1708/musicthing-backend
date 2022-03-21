@@ -1,29 +1,22 @@
+use std::{
+    path::Path,
+    fs::read_dir,
+};
 use axum::{
     http::StatusCode,
     extract::{Extension}
 };
+use tower::BoxError;
 use sqlx::{
     postgres::PgPool,
     types::time::PrimitiveDateTime
 };
-
 use id3::TagLike;
 use metaflac;
 use async_recursion::async_recursion;
-
-use std::{
-    path::Path,
-    fs::read_dir,
-    error::Error,
-};
-
-use crate::utils::{
-    parse_cfg,
-    internal_error,
-};
-use crate::handlers::{
-    TrackDB,
-    RECOGNIZED_EXTENSIONS,
+use crate::{
+    utils::{parse_cfg, internal_error},
+    handlers::{DBTrack, RECOGNIZED_EXTENSIONS},
 };
 
 // helper struct
@@ -55,7 +48,7 @@ pub async fn hard_reload_handler(
 }
 
 // load database metadata from path
-async fn load_db(pool: PgPool) -> Result<(), Box<dyn Error>> {
+async fn load_db(pool: PgPool) -> Result<(), BoxError> {
     // get music_directory path
     let config = parse_cfg()?;
     let music_directory = config.music_directory;
@@ -65,7 +58,7 @@ async fn load_db(pool: PgPool) -> Result<(), Box<dyn Error>> {
 }
 
 // wipe the database
-async fn clear_data(pool: PgPool) -> Result<(), Box<dyn Error>> {
+async fn clear_data(pool: PgPool) -> Result<(), BoxError> {
     // tables to clear from
     let tables = [
         "album_track",
@@ -87,9 +80,9 @@ async fn clear_data(pool: PgPool) -> Result<(), Box<dyn Error>> {
 }
 
 // update old metadata from files that have been changed, or files that have been deleted
-async fn update_old_metadata(pool: PgPool) -> Result<(), Box<dyn Error>> {
+async fn update_old_metadata(pool: PgPool) -> Result<(), BoxError> {
     // get all paths
-    let tracks = sqlx::query_as!(TrackDB, "SELECT * FROM track")
+    let tracks = sqlx::query_as!(DBTrack, "SELECT * FROM track")
         .fetch_all(&pool)
         .await?;
 
@@ -120,7 +113,7 @@ async fn update_old_metadata(pool: PgPool) -> Result<(), Box<dyn Error>> {
 // load new metadata from given music directory path
 // basically recursively going down the directory then calling add_track_from_path on audio files
 #[async_recursion]
-async fn load_new_metadata(pool: PgPool, music_dir: String) -> Result<(), Box<dyn Error>> {
+async fn load_new_metadata(pool: PgPool, music_dir: String) -> Result<(), BoxError> {
     let path = Path::new(&music_dir);
 
     let extension = path.extension();
@@ -151,7 +144,7 @@ async fn load_new_metadata(pool: PgPool, music_dir: String) -> Result<(), Box<dy
 
 // given a path to a track, add the track's metadata to the database
 // if path's track already in the database, it's assumed the track is correct, so we skip it
-async fn add_track_from_path(pool: PgPool, path_str: String) -> Result<(), Box<dyn Error>> {
+async fn add_track_from_path(pool: PgPool, path_str: String) -> Result<(), BoxError> {
     // check if track is already in database
     let already_exists = sqlx::query_scalar!("SELECT (track_id) FROM track WHERE path = ($1)", path_str)
         .fetch_optional(&pool)
@@ -223,7 +216,7 @@ async fn add_track_from_path(pool: PgPool, path_str: String) -> Result<(), Box<d
 }
 
 // given all track's information, add the track to the db
-async fn add_track_from_info(pool: PgPool, track_info: TrackInfo) -> Result<(), Box<dyn Error>> {
+async fn add_track_from_info(pool: PgPool, track_info: TrackInfo) -> Result<(), BoxError> {
     // insert into track database
     let track_id = sqlx::query_scalar!("INSERT INTO track (track_name, path, last_modified) \
         VALUES ($1, $2, $3) RETURNING track_id",
@@ -291,7 +284,7 @@ async fn add_track_from_info(pool: PgPool, track_info: TrackInfo) -> Result<(), 
 }
 
 // given an artist name, either insert the artist into the db or return the id of the pre-existing entry
-async fn insert_artist_from_name(pool: PgPool, name: String) -> Result<i32, Box<dyn Error>> {
+async fn insert_artist_from_name(pool: PgPool, name: String) -> Result<i32, BoxError> {
     let artist_id: i32;
     let artist_id_optional = sqlx::query_scalar!("INSERT INTO artist (artist_name) VALUES ($1) \
         ON CONFLICT DO NOTHING RETURNING artist_id",
@@ -312,7 +305,7 @@ async fn insert_artist_from_name(pool: PgPool, name: String) -> Result<i32, Box<
 }
 
 // given a track id, remove the track's metadata from the database
-async fn delete_track(pool: PgPool, track_id: i32) -> Result<(), Box<dyn Error>> {
+async fn delete_track(pool: PgPool, track_id: i32) -> Result<(), BoxError> {
     // delete the actual track record - should also delete other relations due to ON DELETE CASCADE
     sqlx::query!("DELETE FROM track WHERE track_id = ($1)", track_id)
         .execute(&pool)

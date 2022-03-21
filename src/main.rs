@@ -1,16 +1,19 @@
 use std::{
     net::SocketAddr,
     time::Duration,
-    error::Error,
+    str::FromStr,
+    borrow::Cow,
 };
 use axum::{
-    http::{Method, StatusCode, Uri},
-    handler::Handler,
-    response::{IntoResponse},
     Router,
+    handler::Handler,
+    http::{Method, StatusCode, Uri},
+    response::{IntoResponse},
     routing::{get, get_service},
-    extract::{Extension}
+    extract::{Extension},
+    error_handling::HandleErrorLayer,
 };
+use tower::{ServiceBuilder, BoxError};
 use tower_http::{
     cors::{CorsLayer, Origin},
     trace::TraceLayer,
@@ -21,17 +24,18 @@ use tracing_subscriber::{
     layer::SubscriberExt,
     util::SubscriberInitExt
 };
+use anyhow::{Context, Result};
 
 mod handlers;
 mod utils;
 
-use crate::handlers::{demo, reload, list, play};
-use crate::utils::{
-    parse_cfg,
+use crate::{
+    handlers::{demo, reload, list, play},
+    utils::{SharedState, parse_cfg},
 };
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), BoxError> {
     //set up tracing
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
@@ -60,6 +64,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .route("/api/list", get(list::list_handler))
         .route("/api/play", get(play::play_handler))
         .layer(Extension(pool))
+        .layer(
+            ServiceBuilder::new()
+            // handle errors from middleware
+                .layer(HandleErrorLayer::new(handle_error))
+                .load_shed()
+                .concurrency_limit(config.max_state_concurrency_limit)
+                .timeout(Duration::from_secs(config.state_timeout_seconds))
+                .layer(TraceLayer::new_for_http())
+                .layer(Extension(SharedState::default()))
+                .into_inner(),
+        )
         .nest(
             "/static",
             get_service(ServeDir::new(config.music_directory))
@@ -69,15 +84,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
             )}),
         )
         .layer(CorsLayer::new()
-            .allow_origin(Origin::exact(config.frontend_url.as_str().parse().expect("failed in parsing frontend url")))
+            .allow_origin(Origin::exact(config.frontend_url.as_str().parse()?))
             .allow_methods(vec![Method::GET]))
         .layer(TraceLayer::new_for_http());
     
     // 404 fallback
-    let app = app.fallback(handler_404.into_service());
+    let app = app.fallback(handle_404.into_service());
 
     // app
-    let addr = SocketAddr::from((config.backend_url, config.port));
+    let addr = SocketAddr::from_str(config.backend_socket_addr.as_str())
+        .context("Failed to parse backend_addr in config.json into a valid SocketAddr")?;
     tracing::debug!("Listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
@@ -87,6 +103,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn handler_404(uri: Uri) -> impl IntoResponse {
+async fn handle_404(uri: Uri) -> impl IntoResponse {
     (StatusCode::NOT_FOUND, format!("404 Not Found - No route for {}", uri))
+}
+
+// from axum's kv store example
+// https://github.com/tokio-rs/axum/blob/main/examples/key-value-store/src/main.rs#L54
+async fn handle_error(e: BoxError) -> impl IntoResponse {
+    if e.is::<tower::timeout::error::Elapsed>() {
+        return (
+            StatusCode::REQUEST_TIMEOUT, 
+            Cow::from(format!("request time out. Error: {}", e)));
+    };
+
+    if e.is::<tower::load_shed::error::Overloaded>() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE, 
+            Cow::from(format!("service is overloaded. Error: {}", e)));
+    };
+
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Cow::from(format!("Internal error: {}", e)),
+    )
 }

@@ -1,63 +1,25 @@
+use std::path::Path;
 use axum::{
     http::StatusCode,
     response::{Json},
     extract::{Extension},
 };
+use tower::BoxError;
 use sqlx::postgres::PgPool;
-use serde::{
-    Serialize,
-    Deserialize,
+use crate::{
+    utils::{internal_error, parse_cfg, ListRoot, ListAlbum, ListDisc, ListTrack},
+    handlers::{DBAlbum},
 };
-
-use std::{
-    error::Error,
-    path::Path
-};
-
-use crate::utils::{
-    internal_error,
-    parse_cfg,
-};
-use crate::handlers::{
-    AlbumDB,
-};
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Root {
-    pub albums: Vec<Album>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Album {
-    pub name: String,
-    pub album_artist_name: String,
-    pub discs: Vec<Disc>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Disc {
-    pub number: i32,
-    pub tracks: Vec<Track>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Track {
-    pub number: i32,
-    pub artist: String,
-    pub name: String,
-    pub path: String,
-}
-
 
 pub async fn list_handler(
     Extension(pool): Extension<PgPool>
-) -> Result<Json<Root>, (StatusCode, String)> {
+) -> Result<Json<ListRoot>, (StatusCode, String)> {
     Ok(Json(generate_root(pool.clone()).await.map_err(internal_error)?))
 }
 
-async fn generate_root(pool: PgPool) -> Result<Root, Box<dyn Error>> {
+async fn generate_root(pool: PgPool) -> Result<ListRoot, BoxError> {
     // gather all albums with tracks sorted alphabetically
-    let albums = sqlx::query_as!(AlbumDB, "SELECT DISTINCT album.album_id, album_name FROM album \
+    let albums = sqlx::query_as!(DBAlbum, "SELECT DISTINCT album.album_id, album_name FROM album \
         JOIN album_track ON (album.album_id = album_track.album_id)
         ORDER BY (album_name)")
         .fetch_all(&pool)
@@ -86,7 +48,7 @@ async fn generate_root(pool: PgPool) -> Result<Root, Box<dyn Error>> {
                 .fetch_all(&pool)
                 .await?;
 
-            let track_structs = tracks.iter().map(|track| Track {
+            let track_structs = tracks.iter().map(|track| ListTrack {
                     number: track.track_no.unwrap_or(0),
                     artist: track.artist_name.clone().unwrap_or("Unknown Artist".to_string()),
                     name: track.track_name.clone().unwrap_or("Untitled".to_string()),
@@ -97,7 +59,7 @@ async fn generate_root(pool: PgPool) -> Result<Root, Box<dyn Error>> {
                 }).collect();
 
             // construct disc_struct
-            let disc_struct = Disc {
+            let disc_struct = ListDisc {
                 number: (*disc).unwrap_or(0),
                 tracks: track_structs,
             };
@@ -113,7 +75,7 @@ async fn generate_root(pool: PgPool) -> Result<Root, Box<dyn Error>> {
             .await?;
 
         // construct album_struct
-        let album_struct = Album {
+        let album_struct = ListAlbum {
             name: album.album_name.clone().unwrap_or("Unknown Album".to_string()),
             album_artist_name: album_artist_name.unwrap_or("Unknown Artist".to_string()),
             discs: disc_structs,
@@ -121,7 +83,7 @@ async fn generate_root(pool: PgPool) -> Result<Root, Box<dyn Error>> {
         album_structs.push(album_struct);
     }
 
-    let json_root = Root {
+    let json_root = ListRoot {
         albums: album_structs,
     };
 

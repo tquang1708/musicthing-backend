@@ -7,7 +7,7 @@ pub mod play;
 
 // structs for interfacing with the database
 #[derive(sqlx::FromRow, Debug)]
-pub struct TrackDB {
+pub struct DBTrack {
     track_id: i32,
     track_name: Option<String>,
     path: String,
@@ -15,13 +15,13 @@ pub struct TrackDB {
 }
 
 #[derive(sqlx::FromRow, Debug)]
-pub struct ArtistDB {
+pub struct DBArtist {
     artist_id: i32,
     artist_name: Option<String>,
 }
 
 #[derive(sqlx::FromRow, Debug)]
-pub struct AlbumDB {
+pub struct DBAlbum {
     album_id: i32,
     album_name: Option<String>,
 }
