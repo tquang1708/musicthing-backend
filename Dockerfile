@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# dockerfile for the backend image in docker-compose
 
 # code from https://hub.docker.com/_/rust
 FROM rust:1.59 as builder
@@ -7,15 +7,10 @@ COPY . .
 RUN cargo install --path .
 
 # create the database container image
-FROM postgres:14
-ENV POSTGRES_USER postgres
-ENV POSTGRES_PASSWORD password
-ENV POSTGRES_DB musicthing-metadb
-COPY musicthing_metadb_init.sql /docker-entrypoint-initdb.d/
-
-# move the rust binary inside
-RUN apt-get update && apt-get install -y extra-runtime-dependencies && rm -rf /var/lib/apt/lists/*
+FROM ubuntu:devel
+RUN apt-get update
 EXPOSE 8000
 
 COPY --from=builder /usr/local/cargo/bin/musicthing /usr/local/bin/musicthing
+# COPY ./target/release/musicthing /usr/local/bin/musicthing
 #CMD ["musicthing"]
