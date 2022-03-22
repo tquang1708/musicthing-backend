@@ -1,9 +1,6 @@
-use std::{
-    fs::File,
-    io::BufReader,
-    sync::{Arc, RwLock},
-};
+use std::sync::Arc;
 use axum::http::StatusCode;
+use tokio::sync::RwLock;
 use tower::BoxError;
 use serde::{Serialize, Deserialize};
 use serde_json;
@@ -24,48 +21,48 @@ pub struct Config {
 // parse then return config
 pub fn parse_cfg() -> Result<Config, BoxError> {
     // hard-coding config location
-    let config_reader = BufReader::new(File::open("./src/config.json")?);
-    let config: Config = serde_json::from_reader(config_reader)?;
+    let json_file = include_bytes!("../config.json");
+    let config: Config = serde_json::from_slice(json_file)?;
     Ok(config)
 }
 
-// state struct
+// state struct with tokio's rwlock
 pub type SharedState = Arc<RwLock<State>>;
 
 #[derive(Debug)]
 pub struct State {
-    pub db_modified: bool,
+    pub list_cache_outdated: bool,
     pub list_cache: Option<ListRoot>,
 }
 impl Default for State {
     fn default() -> State {
         return State {
-            db_modified: true,
+            list_cache_outdated: true,
             list_cache: None,
         };
     }
 }
 
 // list json storage struct
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ListRoot {
     pub albums: Vec<ListAlbum>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ListAlbum {
     pub name: String,
     pub album_artist_name: String,
     pub discs: Vec<ListDisc>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ListDisc {
     pub number: i32,
     pub tracks: Vec<ListTrack>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ListTrack {
     pub number: i32,
     pub artist: String,
@@ -77,3 +74,8 @@ pub struct ListTrack {
 pub fn internal_error(err: BoxError) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, format!("Internal error: {}", err.to_string()))
 }
+
+// // slightly different function rwlock poison error
+// pub fn internal_poison_error<T>(err: PoisonError<T>) -> (StatusCode, String) {
+//     (StatusCode::INTERNAL_SERVER_ERROR, format!("SharedState's lock is poisoned: {}", err.to_string()))
+// }

@@ -15,7 +15,7 @@ use id3::TagLike;
 use metaflac;
 use async_recursion::async_recursion;
 use crate::{
-    utils::{parse_cfg, internal_error},
+    utils::{SharedState, parse_cfg, internal_error},
     handlers::{DBTrack, RECOGNIZED_EXTENSIONS},
 };
 
@@ -34,17 +34,32 @@ struct TrackInfo {
 
 // reload_handler for loading database metadata from music directory
 pub async fn reload_handler(
-    Extension(pool): Extension<PgPool>
+    Extension(pool): Extension<PgPool>,
+    Extension(state): Extension<SharedState>
 ) -> Result<(), (StatusCode, String)> {
-    load_db(pool).await.map_err(internal_error)
+    // load data
+    load_db(pool).await.map_err(internal_error)?;
+
+    // update shared state to mark that the list cache is outdated
+    state.write().await.list_cache_outdated = true;
+    Ok(())
 }
 
 // same as above but with wiping the db beforehand
 pub async fn hard_reload_handler(
-    Extension(pool): Extension<PgPool>
+    Extension(pool): Extension<PgPool>,
+    Extension(state): Extension<SharedState>
 ) -> Result<(), (StatusCode, String)> {
+    // clear data
     clear_data(pool.clone()).await.map_err(internal_error)?;
-    load_db(pool).await.map_err(internal_error)
+
+    // load data
+    load_db(pool).await.map_err(internal_error)?;
+
+    // update shared state to mark that the list cache is outdated
+    state.write().await.list_cache_outdated = true;
+
+    Ok(())
 }
 
 // load database metadata from path

@@ -9,7 +9,7 @@ edition = "2021"
 axum = "0.4.6"
 axum-macros = "0.1.2"
 hyper = { version = "0.14.17", features = ["full"] }
-tokio = { version = "1.17.0", features = ["full"] }
+tokio = { version = "1.17.0", features = ["full", "sync"] }
 tower = { version = "0.4.12", features = ["util", "load-shed", "limit", "timeout"] }
 tower-http = { version = "0.2.3", features = ["trace", "cors", "fs"] }
 tracing = "0.1"
