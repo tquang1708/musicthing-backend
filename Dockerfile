@@ -1,27 +1,21 @@
 # syntax=docker/dockerfile:1
-# adapted from https://blog.logrocket.com/packaging-a-rust-web-service-using-docker/
+
+# code from https://hub.docker.com/_/rust
 FROM rust:1.59 as builder
+WORKDIR /usr/src/musicthing
+COPY . .
+RUN cargo install --path .
 
-# create an empty rust project, build it then remove source to make dependencies
-RUN cargo new --bin musicthing
-WORKDIR ./musicthing
-COPY Cargo.toml Cargo.toml
-RUN cargo build --release
-RUN rm src/*
+# create the database container image
+FROM postgres:14
+ENV POSTGRES_USER postgres
+ENV POSTGRES_PASSWORD password
+ENV POSTGRES_DB musicthing-metadb
+COPY musicthing_metadb_init.sql /docker-entrypoint-initdb.d/
 
-## copy project's source
-COPY . ./
-
-# rebuild
-RUN rm ./target/release/deps/musicthing*
-RUN cargo build --release
-
-# create a container image
-FROM ubuntu:focal
-ARG APP=/usr/src/app
-RUN apt-get update
+# move the rust binary inside
+RUN apt-get update && apt-get install -y extra-runtime-dependencies && rm -rf /var/lib/apt/lists/*
 EXPOSE 8000
 
-COPY --from=builder /musicthing/target/release/musicthing ${APP}/musicthing
-WORKDIR ${APP}
-#CMD ["./musicthing"]
+COPY --from=builder /usr/local/cargo/bin/musicthing /usr/local/bin/musicthing
+#CMD ["musicthing"]
