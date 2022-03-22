@@ -13,8 +13,8 @@ pub struct Config {
     pub backend_socket_addr: String,
     pub max_db_connections: u32,
     pub db_connection_timeout_seconds: u64,
-    pub max_state_concurrency_limit: usize,
-    pub state_timeout_seconds: u64,
+    pub concurrency_limit: usize,
+    pub timeout_seconds: u64,
     pub music_directory: String,
 }
 

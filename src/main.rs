@@ -64,17 +64,7 @@ async fn main() -> Result<(), BoxError> {
         .route("/api/list", get(list::list_handler))
         .route("/api/play", get(play::play_handler))
         .layer(Extension(pool))
-        .layer(
-            ServiceBuilder::new()
-            // handle errors from middleware
-                .layer(HandleErrorLayer::new(handle_error))
-                .load_shed()
-                .concurrency_limit(config.max_state_concurrency_limit)
-                .timeout(Duration::from_secs(config.state_timeout_seconds))
-                .layer(TraceLayer::new_for_http())
-                .layer(Extension(SharedState::default()))
-                .into_inner(),
-        )
+        .layer(Extension(SharedState::default()))
         .nest(
             "/static",
             get_service(ServeDir::new(config.music_directory))
@@ -86,7 +76,16 @@ async fn main() -> Result<(), BoxError> {
         .layer(CorsLayer::new()
             .allow_origin(Origin::exact(config.frontend_url.as_str().parse()?))
             .allow_methods(vec![Method::GET]))
-        .layer(TraceLayer::new_for_http());
+        .layer(
+            ServiceBuilder::new()
+                // handle errors
+                .layer(HandleErrorLayer::new(handle_error))
+                .load_shed()
+                .concurrency_limit(config.concurrency_limit)
+                .timeout(Duration::from_secs(config.timeout_seconds))
+                .layer(TraceLayer::new_for_http())
+                .into_inner(),
+            );
     
     // 404 fallback
     let app = app.fallback(handle_404.into_service());

@@ -4,7 +4,7 @@
     "backend_socket_addr": "0.0.0.0:8000",
     "max_db_connections": 5,
     "db_connection_timeout_seconds": 3,
-    "max_state_concurrency_limit": 1024,
-    "state_timeout_seconds": 20,
+    "concurrency_limit": 1024,
+    "timeout_seconds": 60,
     "music_directory": "./music-directory"
 }

@@ -161,6 +161,7 @@ async fn load_new_metadata(pool: PgPool, music_dir: String) -> Result<(), BoxErr
 // if path's track already in the database, it's assumed the track is correct, so we skip it
 async fn add_track_from_path(pool: PgPool, path_str: String) -> Result<(), BoxError> {
     // check if track is already in database
+    // procesing 
     let already_exists = sqlx::query_scalar!("SELECT (track_id) FROM track WHERE path = ($1)", path_str)
         .fetch_optional(&pool)
         .await?;
@@ -232,17 +233,25 @@ async fn add_track_from_path(pool: PgPool, path_str: String) -> Result<(), BoxEr
 
 // given all track's information, add the track to the db
 async fn add_track_from_info(pool: PgPool, track_info: TrackInfo) -> Result<(), BoxError> {
+    // trim null characters from texts
+    let clean_track_name = track_info.track_name.trim_matches(char::from(0)).to_string();
+    let clean_artist_name = track_info.artist_name.trim_matches(char::from(0)).to_string();
+    let clean_album_artist_name = track_info.album_artist_name.trim_matches(char::from(0)).to_string();
+    let clean_album_name = track_info.album_name.trim_matches(char::from(0)).to_string();
+
     // insert into track database
+    println!("{:#?}", track_info.track_name);
     let track_id = sqlx::query_scalar!("INSERT INTO track (track_name, path, last_modified) \
         VALUES ($1, $2, $3) RETURNING track_id",
-        track_info.track_name,
+        clean_track_name,
+        // "X".to_string(),
         track_info.path_str,
         track_info.last_modified)
         .fetch_one(&pool)
         .await?;
     
     // insert artist if artist not in database. there is an unique constraint on artist_name
-    let artist_id = insert_artist_from_name(pool.clone(), track_info.artist_name).await?;
+    let artist_id = insert_artist_from_name(pool.clone(), clean_artist_name).await?;
 
     // update artisttrack table if not already in database
     // track_id is unique in artist_track table
@@ -256,11 +265,11 @@ async fn add_track_from_info(pool: PgPool, track_info: TrackInfo) -> Result<(), 
     // as different albums
     // first we get an album_id where both album_name and artist_id matches what we have
     // insert album artist first in case album artist isn't already in artist
-    let album_artist_id = insert_artist_from_name(pool.clone(), track_info.album_artist_name).await?;
+    let album_artist_id = insert_artist_from_name(pool.clone(), clean_album_artist_name).await?;
     let album_id_with_same_name = sqlx::query_scalar!("SELECT (album.album_id) FROM album \
         JOIN artist_album ON (album.album_id = artist_album.album_id) \
         WHERE album_name = ($1) AND artist_id = ($2)",
-        track_info.album_name,
+        clean_album_name,
         album_artist_id)
         .fetch_optional(&pool)
         .await?;
@@ -277,7 +286,7 @@ async fn add_track_from_info(pool: PgPool, track_info: TrackInfo) -> Result<(), 
             // no album exists with both the same name and the same album artist
             // so this album should be separate from others
             album_id = sqlx::query_scalar!("INSERT INTO album (album_name) VALUES ($1) RETURNING album_id",
-                track_info.album_name)
+                clean_album_name)
                 .fetch_one(&pool)
                 .await?;
 
