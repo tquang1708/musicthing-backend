@@ -5,6 +5,6 @@
     "max_db_connections": 5,
     "db_connection_timeout_seconds": 3,
     "max_state_concurrency_limit": 1024,
-    "state_timeout_seconds": 10,
-    "music_directory": "../music-directory"
+    "state_timeout_seconds": 20,
+    "music_directory": "./music-directory"
 }
