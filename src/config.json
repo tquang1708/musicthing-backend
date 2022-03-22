@@ -1,5 +1,5 @@
 {
-    "database_connection_str": "postgres://postgres:password@db/musicthing-metadb",
+    "database_connection_str": "postgres://postgres:password@localhost/musicthing-metadb",
     "frontend_url": "http://localhost:3000",
     "backend_socket_addr": "0.0.0.0:8000",
     "max_db_connections": 5,
