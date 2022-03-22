@@ -12,10 +12,10 @@ case $option in
         echo "Setting up tables."
         psql -d musicthing-metadb -f musicthing_metadb_init.sql
 
-        echo "Creating music directory at ./music-directory if doesn't already exist."
+        echo "Creating music directory at ../music-directory if doesn't already exist."
         echo "Move your music files here for the backend to pick up."
         echo "Currently only supports .mp3/.flac"
-        mkdir -p "./music-directory"
+        mkdir -p "../music-directory"
         ;;
     n|N) continue ;;
     *) 

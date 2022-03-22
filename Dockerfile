@@ -6,11 +6,10 @@ WORKDIR /usr/src/musicthing
 COPY . .
 RUN cargo install --path .
 
-# create the database container image
+# create the container image
 FROM ubuntu:devel
 RUN apt-get update
 EXPOSE 8000
 
 COPY --from=builder /usr/local/cargo/bin/musicthing /usr/local/bin/musicthing
-# COPY ./target/release/musicthing /usr/local/bin/musicthing
-#CMD ["musicthing"]
+CMD ["musicthing"]
