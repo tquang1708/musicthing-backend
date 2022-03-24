@@ -15,7 +15,7 @@ use id3::TagLike;
 use metaflac;
 use async_recursion::async_recursion;
 use crate::{
-    utils::{SharedState, parse_cfg, internal_error},
+    utils::{SharedState, Config, internal_error},
     handlers::{DBTrack, RECOGNIZED_EXTENSIONS},
 };
 
@@ -35,10 +35,11 @@ struct TrackInfo {
 // reload_handler for loading database metadata from music directory
 pub async fn reload_handler(
     Extension(pool): Extension<PgPool>,
+    Extension(config): Extension<Config>,
     Extension(state): Extension<SharedState>
 ) -> Result<(), (StatusCode, String)> {
     // load data
-    load_db(pool).await.map_err(internal_error)?;
+    load_db(config, pool).await.map_err(internal_error)?;
 
     // update shared state to mark that the list cache is outdated
     state.write().await.list_cache_outdated = true;
@@ -48,13 +49,14 @@ pub async fn reload_handler(
 // same as above but with wiping the db beforehand
 pub async fn hard_reload_handler(
     Extension(pool): Extension<PgPool>,
+    Extension(config): Extension<Config>,
     Extension(state): Extension<SharedState>
 ) -> Result<(), (StatusCode, String)> {
     // clear data
     clear_data(pool.clone()).await.map_err(internal_error)?;
 
     // load data
-    load_db(pool).await.map_err(internal_error)?;
+    load_db(config, pool).await.map_err(internal_error)?;
 
     // update shared state to mark that the list cache is outdated
     state.write().await.list_cache_outdated = true;
@@ -63,13 +65,9 @@ pub async fn hard_reload_handler(
 }
 
 // load database metadata from path
-async fn load_db(pool: PgPool) -> Result<(), BoxError> {
-    // get music_directory path
-    let config = parse_cfg()?;
-    let music_directory = config.music_directory;
-    
+async fn load_db(config: Config, pool: PgPool) -> Result<(), BoxError> {    
     update_old_metadata(pool.clone()).await?;
-    load_new_metadata(pool.clone(), music_directory).await
+    load_new_metadata(pool.clone(), &config.music_directory).await
 }
 
 // wipe the database
@@ -117,7 +115,7 @@ async fn update_old_metadata(pool: PgPool) -> Result<(), BoxError> {
             if last_modified < new_modified {
                 // update metadata if track's modified time is later
                 delete_track(pool.clone(), track_id).await?;
-                add_track_from_path(pool.clone(), path_str.to_string()).await?;
+                add_track_from_path(pool.clone(), path_str).await?;
             }
         }
     };
@@ -128,8 +126,8 @@ async fn update_old_metadata(pool: PgPool) -> Result<(), BoxError> {
 // load new metadata from given music directory path
 // basically recursively going down the directory then calling add_track_from_path on audio files
 #[async_recursion]
-async fn load_new_metadata(pool: PgPool, music_dir: String) -> Result<(), BoxError> {
-    let path = Path::new(&music_dir);
+async fn load_new_metadata(pool: PgPool, music_dir: &str) -> Result<(), BoxError> {
+    let path = Path::new(music_dir);
 
     let extension = path.extension();
     match extension {
@@ -147,7 +145,7 @@ async fn load_new_metadata(pool: PgPool, music_dir: String) -> Result<(), BoxErr
                     let entry = entry?;
                     load_new_metadata(
                         pool.clone(), 
-                        entry.path().to_str().ok_or("Path isn't a valid UTF-8 string")?.to_string()
+                        entry.path().to_str().ok_or("Path isn't a valid UTF-8 string")?
                     ).await?;
                 }
             } // otherwise ignore
@@ -159,7 +157,7 @@ async fn load_new_metadata(pool: PgPool, music_dir: String) -> Result<(), BoxErr
 
 // given a path to a track, add the track's metadata to the database
 // if path's track already in the database, it's assumed the track is correct, so we skip it
-async fn add_track_from_path(pool: PgPool, path_str: String) -> Result<(), BoxError> {
+async fn add_track_from_path(pool: PgPool, path_str: &str) -> Result<(), BoxError> {
     // check if track is already in database
     // procesing 
     let already_exists = sqlx::query_scalar!("SELECT (track_id) FROM track WHERE path = ($1)", path_str)
@@ -170,7 +168,7 @@ async fn add_track_from_path(pool: PgPool, path_str: String) -> Result<(), BoxEr
     };
 
     // get track's last modified date
-    let path = Path::new(&path_str);
+    let path = Path::new(path_str);
     let last_modified = PrimitiveDateTime::from(path.metadata()?.modified()?);
 
     // read relevant tags information
@@ -189,7 +187,7 @@ async fn add_track_from_path(pool: PgPool, path_str: String) -> Result<(), BoxEr
                 album_artist_name: tag.album_artist().unwrap_or("").to_string(),
                 track_number: tag.track().unwrap_or(0),
                 disc_number: tag.disc().unwrap_or(0),
-                path_str: path_str,
+                path_str: path_str.to_string(),
                 last_modified: last_modified,
             };
             add_track_from_info(pool.clone(), track_info).await?;
@@ -205,7 +203,7 @@ async fn add_track_from_path(pool: PgPool, path_str: String) -> Result<(), BoxEr
                         album_artist_name: x.comments.get("ALBUMARTIST").unwrap_or(&Vec::new()).get(0).unwrap_or(&"".to_string()).to_string(),
                         track_number: x.comments.get("TRACKNUMBER").unwrap_or(&Vec::new()).get(0).unwrap_or(&"0".to_string()).to_string().parse::<u32>()?,
                         disc_number: x.comments.get("DISCNUMBER").unwrap_or(&Vec::new()).get(0).unwrap_or(&"0".to_string()).to_string().parse::<u32>()?,
-                        path_str: path_str,
+                        path_str: path_str.to_string(),
                         last_modified: last_modified,
                     };
                     add_track_from_info(pool.clone(), track_info).await?;
@@ -218,7 +216,7 @@ async fn add_track_from_path(pool: PgPool, path_str: String) -> Result<(), BoxEr
                         album_artist_name: String::from(""),
                         track_number: 0,
                         disc_number: 0,
-                        path_str: path_str,
+                        path_str: path_str.to_string(),
                         last_modified: last_modified,
                     };
                     add_track_from_info(pool.clone(), track_info).await?;
@@ -234,13 +232,11 @@ async fn add_track_from_path(pool: PgPool, path_str: String) -> Result<(), BoxEr
 // given all track's information, add the track to the db
 async fn add_track_from_info(pool: PgPool, track_info: TrackInfo) -> Result<(), BoxError> {
     // trim null characters from texts
-    let clean_track_name = track_info.track_name.trim_matches(char::from(0)).to_string();
-    let clean_artist_name = track_info.artist_name.trim_matches(char::from(0)).to_string();
-    let clean_album_artist_name = track_info.album_artist_name.trim_matches(char::from(0)).to_string();
-    let clean_album_name = track_info.album_name.trim_matches(char::from(0)).to_string();
+    let clean_track_name = track_info.track_name.trim_matches(char::from(0));
+    let clean_artist_name = track_info.artist_name.trim_matches(char::from(0));
+    let clean_album_artist_name = track_info.album_artist_name.trim_matches(char::from(0));
+    let clean_album_name = track_info.album_name.trim_matches(char::from(0));
 
-    // insert into track database
-    println!("{:#?}", track_info.track_name);
     let track_id = sqlx::query_scalar!("INSERT INTO track (track_name, path, last_modified) \
         VALUES ($1, $2, $3) RETURNING track_id",
         clean_track_name,
@@ -304,11 +300,14 @@ async fn add_track_from_info(pool: PgPool, track_info: TrackInfo) -> Result<(), 
         .execute(&pool)
         .await?;
 
+    // cool progress text
+    println!("{:#?} - {:#?}", clean_artist_name, clean_track_name);
+
     Ok(())
 }
 
 // given an artist name, either insert the artist into the db or return the id of the pre-existing entry
-async fn insert_artist_from_name(pool: PgPool, name: String) -> Result<i32, BoxError> {
+async fn insert_artist_from_name(pool: PgPool, name: &str) -> Result<i32, BoxError> {
     let artist_id: i32;
     let artist_id_optional = sqlx::query_scalar!("INSERT INTO artist (artist_name) VALUES ($1) \
         ON CONFLICT DO NOTHING RETURNING artist_id",

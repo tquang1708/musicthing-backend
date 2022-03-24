@@ -40,18 +40,19 @@ async fn main() -> Result<(), BoxError> {
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
             std::env::var("RUST_LOG")
-                .unwrap_or_else(|_| "tower_http=debug".into()),
+                .unwrap_or_else(|_| "musicthing=debug,tower_http=debug".into()),
         ))
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    // load config
+    let config = parse_cfg()?;
+
     // metadata db connection
-    let config = parse_cfg()?; // load config
-    let db_connection_str = config.database_connection_str;
     let pool = PgPoolOptions::new()
         .max_connections(config.max_db_connections)
         .connect_timeout(Duration::from_secs(config.db_connection_timeout_seconds))
-        .connect(&db_connection_str)
+        .connect(&config.database_connection_str)
         .await
         .expect("Can't connect to database");
 
@@ -64,6 +65,7 @@ async fn main() -> Result<(), BoxError> {
         .route("/api/list", get(list::list_handler))
         .route("/api/play", get(play::play_handler))
         .layer(Extension(pool))
+        .layer(Extension(config.clone()))
         .layer(Extension(SharedState::default()))
         .nest(
             "/static",

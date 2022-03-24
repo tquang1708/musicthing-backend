@@ -9,8 +9,8 @@ use tower::BoxError;
 use sqlx::postgres::PgPool;
 use crate::{
     utils::{
-        parse_cfg, internal_error,
-        SharedState,
+        internal_error,
+        SharedState, Config,
         ListRoot, ListAlbum, ListDisc, ListTrack},
     handlers::{DBAlbum},
 };
@@ -20,7 +20,8 @@ use crate::{
 #[debug_handler]
 pub async fn list_handler(
     Extension(pool): Extension<PgPool>,
-    Extension(state): Extension<SharedState>
+    Extension(config): Extension<Config>,
+    Extension(state): Extension<SharedState>,
 ) -> Result<Json<Option<ListRoot>>, (StatusCode, String)> {
     {
         let state_read = state.read().await;
@@ -34,7 +35,7 @@ pub async fn list_handler(
 
     // if function did not early return in previous step this means list cache is outdated
     // update state with new list cache
-    let new_list_cache = generate_root(pool.clone()).await.map_err(internal_error)?;
+    let new_list_cache = generate_root(config, pool.clone()).await.map_err(internal_error)?;
     state.write().await.list_cache = new_list_cache.clone();
 
     // change list_cache_outdated to false to indicate list_cache has been updated
@@ -44,7 +45,7 @@ pub async fn list_handler(
     Ok(Json(new_list_cache))
 }
 
-async fn generate_root(pool: PgPool) -> Result<Option<ListRoot>, BoxError> {
+async fn generate_root(config: Config, pool: PgPool) -> Result<Option<ListRoot>, BoxError> {
     // gather all albums with tracks sorted alphabetically
     let albums = sqlx::query_as!(DBAlbum, "SELECT DISTINCT album.album_id, album_name FROM album \
         JOIN album_track ON (album.album_id = album_track.album_id)
@@ -81,7 +82,7 @@ async fn generate_root(pool: PgPool) -> Result<Option<ListRoot>, BoxError> {
                         artist: track.artist_name.clone().unwrap_or("Unknown Artist".to_string()),
                         name: track.track_name.clone().unwrap_or("Untitled".to_string()),
                         path: Path::new(&track.path)
-                            .strip_prefix(parse_cfg().expect("config.json corrupted or not found").music_directory)
+                            .strip_prefix(config.music_directory.clone())
                             .expect("audio file not part of music directory")
                             .to_string_lossy().into_owned(),
                     }).collect();

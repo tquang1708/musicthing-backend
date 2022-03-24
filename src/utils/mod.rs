@@ -13,7 +13,7 @@ use serde::{Serialize, Deserialize};
 use serde_json;
 
 // config struct
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct Config {
     pub database_connection_str: String,
     pub frontend_url: String,
