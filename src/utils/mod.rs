@@ -1,7 +1,14 @@
-use std::sync::Arc;
+use std::{
+    sync::Arc, 
+    env,
+    path::PathBuf,
+    fs::File,
+    io::BufReader,
+};
 use axum::http::StatusCode;
 use tokio::sync::RwLock;
 use tower::BoxError;
+use dirs;
 use serde::{Serialize, Deserialize};
 use serde_json;
 
@@ -20,10 +27,67 @@ pub struct Config {
 
 // parse then return config
 pub fn parse_cfg() -> Result<Config, BoxError> {
-    // hard-coding config location
-    let json_file = include_bytes!("../config.json");
-    let config: Config = serde_json::from_slice(json_file)?;
+    // looking up config
+    let config;
+    match find_cfg()? {
+        Some(path) => {
+            // path found
+            config = serde_json::from_reader(BufReader::new(File::open(path)?))?;
+        },
+        None => {
+            // no path found - load default config
+            config = Config {
+                database_connection_str: "postgres://postgres:password@localhost/musicthing-metadb".to_string(),
+                frontend_url: "http://localhost:3000".to_string(),
+                backend_socket_addr: "0.0.0.0:8000".to_string(),
+                max_db_connections: 5,
+                db_connection_timeout_seconds: 3,
+                concurrency_limit: 1024,
+                timeout_seconds: 60,
+                music_directory: "../music-directory".to_string(),
+            };
+            println!("No config.json found. Using default config.");
+            println!("{:#?}", config);
+        }
+    }
+
     Ok(config)
+}
+
+fn find_cfg() -> Result<Option<PathBuf>, BoxError> {
+    // look in config
+    println!("Searching for config.json.");
+    match dirs::config_dir() {
+        Some(config_path) => {
+            let mut path = config_path;
+            path.push("musicthing");
+            path.push("config.json");
+            println!("Searching in {}...", path.to_str().ok_or("Path isn't a valid UTF-8 string")?);
+
+            if path.exists() {
+                println!("Found config.json. Loading configs.");
+                return Ok(Some(path));
+            }
+        },
+        None => {
+            println!("Config directory not found. Skipping...");
+            println!("Review https://docs.rs/dirs/latest/dirs/fn.config_dir.html for details.");
+        }
+    }
+
+    // we will reach here if .config doesn't exist
+    // look in current directory
+    println!("Searching in current directory...");
+    let mut path = env::current_dir()?;
+    path.push("config.json");
+    if path.exists() {
+        // this code is duped from above so i do wonder whether there's a cleaner way to write this
+        println!("Found config.json. Loading configs.");
+        return Ok(Some(path));
+    }
+
+    // we can't find it anywhere. Return none
+    Ok(None)
 }
 
 // state struct with tokio's rwlock

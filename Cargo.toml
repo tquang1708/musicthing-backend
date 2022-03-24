@@ -18,6 +18,7 @@ sqlx = {version = "0.5.11", features = ["runtime-tokio-rustls", "any", "postgres
 
 serde = "1.0"
 serde_json = "1.0"
+dirs = "4.0.0"
 async-recursion = "1.0.0"
 id3 = "1.0.2"
 metaflac = "0.2.5"

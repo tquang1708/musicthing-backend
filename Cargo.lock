@@ -751,6 +751,7 @@ dependencies = [
  "async-recursion",
  "axum",
  "axum-macros",
+ "dirs",
  "hyper",
  "id3",
  "metaflac",
