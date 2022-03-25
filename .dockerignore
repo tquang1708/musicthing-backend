@@ -1,3 +1,4 @@
+/self_signed_certs
 .dockerignore
 Dockerfile
 docker-compose.yml
