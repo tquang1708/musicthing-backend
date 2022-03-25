@@ -1,7 +1,7 @@
 /target
 /music-directory
 /self-signed-certs
-./config.json
+/config.json
 docker-compose.yml
 Dockerfile
 .dockerignore
