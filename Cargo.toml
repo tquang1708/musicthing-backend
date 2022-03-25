@@ -12,7 +12,7 @@ axum-server = { version = "0.3.3", features = ["tls-rustls"] }
 hyper = { version = "0.14.17", features = ["full"] }
 tokio = { version = "1.17.0", features = ["full", "sync"] }
 tower = { version = "0.4.12", features = ["util", "load-shed", "limit", "timeout"] }
-tower-http = { version = "0.2.3", features = ["trace", "cors", "fs"] }
+tower-http = { version = "0.2.3", features = ["trace", "cors", "fs", "redirect"] }
 tracing = "0.1"
 tracing-subscriber = { version="0.3", features = ["env-filter"] }
 sqlx = {version = "0.5.11", features = ["runtime-tokio-rustls", "any", "postgres", "time", "offline"]}
@@ -20,6 +20,7 @@ sqlx = {version = "0.5.11", features = ["runtime-tokio-rustls", "any", "postgres
 serde = "1.0"
 serde_json = "1.0"
 dirs = "4.0.0"
+shellexpand = "2.1.0"
 async-recursion = "1.0.0"
 id3 = "1.0.2"
 metaflac = "0.2.5"

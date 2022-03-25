@@ -300,9 +300,6 @@ async fn add_track_from_info(pool: PgPool, track_info: TrackInfo) -> Result<(), 
         .execute(&pool)
         .await?;
 
-    // cool progress text
-    println!("{:#?} - {:#?}", clean_artist_name, clean_track_name);
-
     Ok(())
 }
 

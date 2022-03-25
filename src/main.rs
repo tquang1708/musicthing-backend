@@ -16,7 +16,7 @@ use axum::{
 use axum_server::tls_rustls::RustlsConfig;
 use tower::{ServiceBuilder, BoxError};
 use tower_http::{
-    cors::{CorsLayer, Origin, Any},
+    cors::{CorsLayer, Origin},
     trace::TraceLayer,
     services::ServeDir,
 };
@@ -76,12 +76,6 @@ async fn main() -> Result<(), BoxError> {
                 format!("Unhandled internal error: {}", e),
             )}),
         )
-        // .layer(CorsLayer::new()
-        //     .allow_origin(Origin::exact(config.frontend_url.as_str().parse()?))
-        //     .allow_methods(vec![Method::GET]))
-        // .layer(CorsLayer::new()
-        //     .allow_origin(Any)
-        //     .allow_methods(vec![Method::GET]))
         .layer(CorsLayer::new()
             .allow_origin(Origin::list(vec![
                 "http://localhost:3000".parse()?,

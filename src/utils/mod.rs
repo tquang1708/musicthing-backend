@@ -9,6 +9,7 @@ use axum::http::StatusCode;
 use tokio::sync::RwLock;
 use tower::BoxError;
 use dirs;
+use shellexpand;
 use serde::{Serialize, Deserialize};
 use serde_json;
 
@@ -29,11 +30,14 @@ pub struct Config {
 // parse then return config
 pub fn parse_cfg() -> Result<Config, BoxError> {
     // looking up config
-    let config;
+    let mut config: Config;
     match find_file("config.json")? {
         Some(path) => {
             // path found
             config = serde_json::from_reader(BufReader::new(File::open(path)?))?;
+
+            // expand music_directory
+            config.music_directory = shellexpand::full(&config.music_directory)?.to_string();
         },
         None => {
             // no path found - load default config
