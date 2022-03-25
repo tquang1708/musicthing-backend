@@ -13,6 +13,7 @@ use axum::{
     extract::{Extension},
     error_handling::HandleErrorLayer,
 };
+use axum_server::tls_rustls::RustlsConfig;
 use tower::{ServiceBuilder, BoxError};
 use tower_http::{
     cors::{CorsLayer, Origin},
@@ -31,7 +32,7 @@ mod utils;
 
 use crate::{
     handlers::{demo, reload, list, play},
-    utils::{SharedState, parse_cfg},
+    utils::{SharedState, parse_cfg, find_file},
 };
 
 #[tokio::main]
@@ -96,10 +97,32 @@ async fn main() -> Result<(), BoxError> {
     let addr = SocketAddr::from_str(config.backend_socket_addr.as_str())
         .context("Failed to parse backend_addr in config.json into a valid SocketAddr")?;
     tracing::debug!("Listening on {}", addr);
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+
+    if config.use_tls {
+        // encrypt over tls to send over https
+        // tls config
+        let cert = find_file("self_signed_certs/cert.pem")?;
+        let key = find_file("self_signed_certs/key.pem")?;
+
+        // if any of cert or key is None, return early
+        let tls_config = RustlsConfig::from_pem_file(
+            cert.ok_or("Failed to find cert.pem")?,
+            key.ok_or("Failed to find key.pem")?,
+        )
+            .await
+            .context("Failed to parse .pem files for RustlsConfig")?;
+
+        axum_server::bind_rustls(addr, tls_config)
+            .serve(app.into_make_service())
+            .await
+            .unwrap();
+    } else {
+        // send unencrypted over http
+        axum_server::bind(addr)
+            .serve(app.into_make_service())
+            .await
+            .unwrap();
+    }
 
     Ok(())
 }

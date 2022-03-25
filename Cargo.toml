@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 axum = "0.4.6"
 axum-macros = "0.1.2"
+axum-server = { version = "0.3.3", features = ["tls-rustls"] }
 hyper = { version = "0.14.17", features = ["full"] }
 tokio = { version = "1.17.0", features = ["full", "sync"] }
 tower = { version = "0.4.12", features = ["util", "load-shed", "limit", "timeout"] }

@@ -2,6 +2,7 @@
     "database_connection_str": "postgres://postgres:password@localhost/musicthing-metadb",
     "frontend_url": "http://localhost:3000",
     "backend_socket_addr": "0.0.0.0:8000",
+    "use_tls": true,
     "max_db_connections": 5,
     "db_connection_timeout_seconds": 3,
     "concurrency_limit": 1024,

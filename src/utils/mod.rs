@@ -18,6 +18,7 @@ pub struct Config {
     pub database_connection_str: String,
     pub frontend_url: String,
     pub backend_socket_addr: String,
+    pub use_tls: bool,
     pub max_db_connections: u32,
     pub db_connection_timeout_seconds: u64,
     pub concurrency_limit: usize,
@@ -29,7 +30,7 @@ pub struct Config {
 pub fn parse_cfg() -> Result<Config, BoxError> {
     // looking up config
     let config;
-    match find_cfg()? {
+    match find_file("config.json")? {
         Some(path) => {
             // path found
             config = serde_json::from_reader(BufReader::new(File::open(path)?))?;
@@ -40,6 +41,7 @@ pub fn parse_cfg() -> Result<Config, BoxError> {
                 database_connection_str: "postgres://postgres:password@localhost/musicthing-metadb".to_string(),
                 frontend_url: "http://localhost:3000".to_string(),
                 backend_socket_addr: "0.0.0.0:8000".to_string(),
+                use_tls: false,
                 max_db_connections: 5,
                 db_connection_timeout_seconds: 3,
                 concurrency_limit: 1024,
@@ -54,18 +56,18 @@ pub fn parse_cfg() -> Result<Config, BoxError> {
     Ok(config)
 }
 
-fn find_cfg() -> Result<Option<PathBuf>, BoxError> {
+pub fn find_file(filename: &str) -> Result<Option<PathBuf>, BoxError> {
     // look in config
-    println!("Searching for config.json.");
+    println!("Searching for {}", filename);
     match dirs::config_dir() {
         Some(config_path) => {
             let mut path = config_path;
             path.push("musicthing");
-            path.push("config.json");
+            path.push(format!("{}", filename));
             println!("Searching in {}...", path.to_str().ok_or("Path isn't a valid UTF-8 string")?);
 
             if path.exists() {
-                println!("Found config.json. Loading configs.");
+                println!("{} found.", filename);
                 return Ok(Some(path));
             }
         },
@@ -79,14 +81,15 @@ fn find_cfg() -> Result<Option<PathBuf>, BoxError> {
     // look in current directory
     println!("Searching in current directory...");
     let mut path = env::current_dir()?;
-    path.push("config.json");
+    path.push(format!("{}", filename));
     if path.exists() {
         // this code is duped from above so i do wonder whether there's a cleaner way to write this
-        println!("Found config.json. Loading configs.");
+        println!("{} found.", filename);
         return Ok(Some(path));
     }
 
     // we can't find it anywhere. Return none
+    println!("Failed to find {}", filename);
     Ok(None)
 }
 
