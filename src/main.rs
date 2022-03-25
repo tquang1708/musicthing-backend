@@ -79,9 +79,16 @@ async fn main() -> Result<(), BoxError> {
         // .layer(CorsLayer::new()
         //     .allow_origin(Origin::exact(config.frontend_url.as_str().parse()?))
         //     .allow_methods(vec![Method::GET]))
+        // .layer(CorsLayer::new()
+        //     .allow_origin(Any)
+        //     .allow_methods(vec![Method::GET]))
         .layer(CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods(vec![Method::GET]))
+            .allow_origin(Origin::list(vec![
+                "http://localhost:3000".parse()?,
+                config.frontend_url.parse()?,
+            ]))
+            .allow_methods(vec![Method::GET])
+        )
         .layer(
             ServiceBuilder::new()
                 // handle errors
@@ -91,7 +98,7 @@ async fn main() -> Result<(), BoxError> {
                 .timeout(Duration::from_secs(config.timeout_seconds))
                 .layer(TraceLayer::new_for_http())
                 .into_inner(),
-            );
+        );
     
     // 404 fallback
     let app = app.fallback(handle_404.into_service());

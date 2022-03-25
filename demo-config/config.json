@@ -1,6 +1,6 @@
 {
     "database_connection_str": "postgres://postgres:password@localhost/musicthing-metadb",
-    "frontend_url": "http://localhost:3000",
+    "frontend_url": "https://focused-keller-48c7e8.netlify.app",
     "backend_socket_addr": "0.0.0.0:8000",
     "use_tls": true,
     "max_db_connections": 5,
