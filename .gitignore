@@ -2,6 +2,3 @@
 /music-directory
 /self-signed-certs
 /config.json
-docker-compose.yml
-Dockerfile
-.dockerignore
