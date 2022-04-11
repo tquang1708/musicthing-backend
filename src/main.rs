@@ -15,8 +15,11 @@ use axum::{
 };
 use axum_server::tls_rustls::RustlsConfig;
 use tower::{ServiceBuilder, BoxError};
+#[allow(unused_imports)]
 use tower_http::{
-    cors::{CorsLayer, Origin, Any},
+    cors::{CorsLayer, Origin, Any}
+};
+use tower_http::{
     trace::TraceLayer,
     services::ServeDir,
 };

@@ -5,6 +5,8 @@ pub mod reload;
 pub mod list;
 pub mod play;
 
+pub mod tag_parser;
+
 // structs for interfacing with the database
 #[derive(sqlx::FromRow, Debug)]
 #[allow(dead_code)]

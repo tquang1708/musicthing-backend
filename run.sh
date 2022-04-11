@@ -59,4 +59,4 @@ case $option in
 esac
 
 echo "Starting up backend."
-cargo run > log.txt &
+cargo run --release > log.txt &

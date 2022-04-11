@@ -2,7 +2,6 @@ use std::{
     path::Path,
     fs::{File, read_dir},
     io::Write,
-    time::Duration,
 };
 use axum::{
     http::StatusCode,
@@ -14,30 +13,17 @@ use sqlx::{
     types::time::PrimitiveDateTime
 };
 use async_recursion::async_recursion;
-use id3::TagLike;
-use metaflac;
-use mp3_duration;
 use blake3;
 use anyhow::{Context, Result};
+
 use crate::{
     utils::{SharedState, Config, internal_error},
-    handlers::{DBTrack, RECOGNIZED_EXTENSIONS},
+    handlers::{
+        DBTrack, 
+        RECOGNIZED_EXTENSIONS, 
+        tag_parser::{TrackInfo, parse_tag}
+    },
 };
-
-// helper struct
-#[derive(Debug)]
-struct TrackInfo {
-    track_name: String,
-    artist_name: String,
-    album_name: String,
-    album_artist_name: String,
-    track_number: u32,
-    disc_number: u32,
-    length_seconds: u64,
-    art: Option<Vec<u8>>,
-    path_str: String,
-    last_modified: PrimitiveDateTime,
-}
 
 // reload_handler for loading database metadata from music directory
 pub async fn reload_handler(
@@ -175,113 +161,8 @@ async fn add_track_from_path(pool: PgPool, path_str: &str, art_dir: &str) -> Res
         return Ok(()); // early return
     };
 
-    // get track's last modified date
-    let path = Path::new(path_str);
-    let last_modified = PrimitiveDateTime::from(path.metadata()?.modified()?);
-
-    // read relevant tags information
-    // supporting only mp3 and flac for now
-    let extension = path
-        .extension().ok_or(format!("File at {} has no extension", path_str))?
-        .to_str().ok_or(format!("File at {} has invalid extension", path_str))?;
-
-    match extension {
-        "mp3" => {
-            let tag = id3::Tag::read_from_path(path)?;
-
-            // get picture
-            let mut pictures_iter = tag.pictures();
-            let mut picture = None;
-            loop {
-                if let Some(picture_curr) = pictures_iter.next() {
-                    if picture_curr.picture_type == id3::frame::PictureType::CoverFront {
-                        // if cover front we can stop
-                        picture = Some(picture_curr.data.clone());
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-
-            let track_info = TrackInfo {
-                track_name: tag.title().unwrap_or("").to_string(),
-                artist_name: tag.artist().unwrap_or("").to_string(),
-                album_name: tag.album().unwrap_or("").to_string(),
-                album_artist_name: tag.album_artist().unwrap_or("").to_string(),
-                track_number: tag.track().unwrap_or(0),
-                disc_number: tag.disc().unwrap_or(0),
-                length_seconds: mp3_duration::from_path(path).unwrap_or(Duration::new(0, 0)).as_secs(),
-                art: picture,
-                path_str: path_str.to_string(),
-                last_modified: last_modified,
-            };
-            add_track_from_info(pool.clone(), track_info, art_dir).await?;
-        },
-        "flac" => {
-            let tag = metaflac::Tag::read_from_path(path)?;
-            let track_info: TrackInfo;
-
-            // get length
-            let track_length;
-            if let Some(streaminfo) = tag.get_streaminfo() {
-                track_length = streaminfo.total_samples / streaminfo.sample_rate as u64;
-            } else {
-                track_length = 0;
-            };
-
-            // get picture
-            // exact same interface as id3 apparently
-            let mut pictures_iter = tag.pictures();
-            let mut picture = None;
-            loop {
-                if let Some(picture_curr) = pictures_iter.next() {
-                    if picture_curr.picture_type == metaflac::block::PictureType::CoverFront {
-                        // if cover front we can stop
-                        picture = Some(picture_curr.data.clone());
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-
-            match tag.vorbis_comments() {
-                Some(x) => {
-                    track_info = TrackInfo {
-                        track_name: x.comments.get("TITLE").unwrap_or(&Vec::new()).get(0).unwrap_or(&"".to_string()).to_string(),
-                        artist_name: x.comments.get("ARTIST").unwrap_or(&Vec::new()).get(0).unwrap_or(&"".to_string()).to_string(),
-                        album_name: x.comments.get("ALBUM").unwrap_or(&Vec::new()).get(0).unwrap_or(&"".to_string()).to_string(),
-                        album_artist_name: x.comments.get("ALBUMARTIST").unwrap_or(&Vec::new()).get(0).unwrap_or(&"".to_string()).to_string(),
-                        track_number: x.comments.get("TRACKNUMBER").unwrap_or(&Vec::new()).get(0).unwrap_or(&"0".to_string()).to_string().parse::<u32>()?,
-                        disc_number: x.comments.get("DISCNUMBER").unwrap_or(&Vec::new()).get(0).unwrap_or(&"0".to_string()).to_string().parse::<u32>()?,
-                        length_seconds: track_length,
-                        art: picture,
-                        path_str: path_str.to_string(),
-                        last_modified: last_modified,
-                    };
-                },
-                None => {
-                    track_info = TrackInfo {
-                        track_name: String::from(""),
-                        artist_name: String::from(""),
-                        album_name: String::from(""),
-                        album_artist_name: String::from(""),
-                        track_number: 0,
-                        disc_number: 0,
-                        length_seconds: track_length,
-                        art: picture,
-                        path_str: path_str.to_string(),
-                        last_modified: last_modified,
-                    };
-                }
-            }
-
-            add_track_from_info(pool.clone(), track_info, art_dir).await?;
-        },
-        _ => Err(format!("File at {0} has unsupported extension {1}", path_str, extension))?,
-    };
-
+    // parse track's tag then add based on info
+    add_track_from_info(pool.clone(), parse_tag(path_str)?, art_dir).await?;
     Ok(())
 }
 
