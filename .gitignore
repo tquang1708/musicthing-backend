@@ -1,5 +1,5 @@
 /target
-/music
-/music-directory
 /self-signed-certs
-/config.json
+config.json
+log.txt
+/art

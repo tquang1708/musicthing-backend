@@ -1,5 +1,70 @@
 {
   "db": "PostgreSQL",
+  "02dd7392004bd565490c0d3f20e0d33f99ea531026e146fedb3eff7b8a0ecec3": {
+    "describe": {
+      "columns": [
+        {
+          "name": "path",
+          "ordinal": 0,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "SELECT path FROM art JOIN album_art ON (album_art.art_id = art.art_id) JOIN album ON (album.album_id = album_art.album_id) WHERE album.album_id = ($1)"
+  },
+  "05138d8da68824445ae66e0ade07de5a78b6eb5c9513d9a359721f5835cff083": {
+    "describe": {
+      "columns": [
+        {
+          "name": "track_no",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "artist_name",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "track_name",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "path",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "length_seconds",
+          "ordinal": 4,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [
+        true,
+        true,
+        true,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Int4"
+        ]
+      }
+    },
+    "query": "SELECT track_no, artist_name, track_name, path, length_seconds FROM track JOIN artist_track ON (track.track_id = artist_track.track_id) JOIN artist ON (artist_track.artist_id = artist.artist_id) JOIN album_track ON (track.track_id = album_track.track_id) WHERE album_id = ($1) AND disc_no = ($2) ORDER BY (track_no)"
+  },
   "070dd93ded3866c39076b816567cf9a32fbb4c4d9bfefd9e3c130717a47a501d": {
     "describe": {
       "columns": [
@@ -19,6 +84,29 @@
       }
     },
     "query": "SELECT artist_name FROM album JOIN artist_album ON (album.album_id = artist_album.album_id) JOIN artist ON (artist.artist_id = artist_album.artist_id) WHERE album.album_id = ($1)"
+  },
+  "09311946a9fa67fe57ff7bd0a5898b16095a318361ce60a7effc8bc9b6103202": {
+    "describe": {
+      "columns": [
+        {
+          "name": "track_id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text",
+          "Timestamp",
+          "Int4"
+        ]
+      }
+    },
+    "query": "INSERT INTO track (track_name, path, last_modified, length_seconds) VALUES ($1, $2, $3, $4) RETURNING track_id"
   },
   "1153bab7f5b2a780e48b6403fa3ae407219cd2bffbdd9beec3841ff1208cb487": {
     "describe": {
@@ -75,11 +163,17 @@
           "name": "last_modified",
           "ordinal": 3,
           "type_info": "Timestamp"
+        },
+        {
+          "name": "length_seconds",
+          "ordinal": 4,
+          "type_info": "Int4"
         }
       ],
       "nullable": [
         false,
         true,
+        false,
         false,
         false
       ],
@@ -149,28 +243,6 @@
     },
     "query": "SELECT DISTINCT disc_no FROM album_track WHERE album_id = ($1) ORDER BY (disc_no)"
   },
-  "a9fe7701e48e6938be7ec7a1932a30e058311d9f97d881eb0877280cd978cb3c": {
-    "describe": {
-      "columns": [
-        {
-          "name": "track_id",
-          "ordinal": 0,
-          "type_info": "Int4"
-        }
-      ],
-      "nullable": [
-        false
-      ],
-      "parameters": {
-        "Left": [
-          "Text",
-          "Text",
-          "Timestamp"
-        ]
-      }
-    },
-    "query": "INSERT INTO track (track_name, path, last_modified) VALUES ($1, $2, $3) RETURNING track_id"
-  },
   "b87cf2993469bba604abdaa98258648221411cef7e5f4728988bdfdcd3a6f42f": {
     "describe": {
       "columns": [
@@ -191,6 +263,39 @@
     },
     "query": "SELECT (track_id) FROM track WHERE path = ($1)"
   },
+  "c11c69fe3fd6064517431bcbf4ad2b6a9c59b240ec9517a9ffd6b514c16b84e4": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Int4"
+        ]
+      }
+    },
+    "query": "INSERT INTO track_art (track_id, art_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
+  },
+  "c130f2e0fb53cb0b04edce25a183f78ce4e06645e70fd91c470e074a52a25201": {
+    "describe": {
+      "columns": [
+        {
+          "name": "art_id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Bytea"
+        ]
+      }
+    },
+    "query": "SELECT art_id FROM art WHERE hash = ($1)"
+  },
   "c3f049add274895445ed93eaa387ec4e9c69b56ac0ec6ce703f9b6e0019c78b1": {
     "describe": {
       "columns": [],
@@ -206,6 +311,27 @@
     },
     "query": "INSERT INTO album_track (album_id, track_id, track_no, disc_no) VALUES ($1, $2, $3, $4)"
   },
+  "d4b876297c587aca1e26d06db87be0c6c0b227c9d126dbd2061242116e0d97a1": {
+    "describe": {
+      "columns": [
+        {
+          "name": "art_id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Bytea",
+          "Text"
+        ]
+      }
+    },
+    "query": "INSERT INTO art (hash, path) VALUES ($1, $2) RETURNING art_id"
+  },
   "de436f61198d99543f59a0f71195f5829e339b4c35a5a58480199edc64f4b966": {
     "describe": {
       "columns": [],
@@ -219,36 +345,10 @@
     },
     "query": "INSERT INTO artist_track (artist_id, track_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
   },
-  "e5cda2d0d9e657f0966afb48358e7c299b2c5273204ccc618262a94534104a3a": {
+  "e44ba79772d76d31e5d36879dd4138c4089e9b884d5ffcccadec2f14dd4f2644": {
     "describe": {
-      "columns": [
-        {
-          "name": "track_no",
-          "ordinal": 0,
-          "type_info": "Int4"
-        },
-        {
-          "name": "artist_name",
-          "ordinal": 1,
-          "type_info": "Text"
-        },
-        {
-          "name": "track_name",
-          "ordinal": 2,
-          "type_info": "Text"
-        },
-        {
-          "name": "path",
-          "ordinal": 3,
-          "type_info": "Text"
-        }
-      ],
-      "nullable": [
-        true,
-        true,
-        true,
-        false
-      ],
+      "columns": [],
+      "nullable": [],
       "parameters": {
         "Left": [
           "Int4",
@@ -256,7 +356,7 @@
         ]
       }
     },
-    "query": "SELECT track_no, artist_name, track_name, path FROM track JOIN artist_track ON (track.track_id = artist_track.track_id) JOIN artist ON (artist_track.artist_id = artist.artist_id) JOIN album_track ON (track.track_id = album_track.track_id) WHERE album_id = ($1) AND disc_no = ($2) ORDER BY (track_no)"
+    "query": "INSERT INTO album_art (album_id, art_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
   },
   "efc06f91228bbc4ce02b0518309b394270a02f8f99807311b2d066d0c8582fa7": {
     "describe": {
@@ -314,5 +414,18 @@
       }
     },
     "query": "SELECT DISTINCT album.album_id, album_name FROM album JOIN album_track ON (album.album_id = album_track.album_id)\n        ORDER BY (album_name)"
+  },
+  "ff54f9776e3ad601ad5b4a503c7b95eab430241963ac160102141bcb37a895d7": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Int4"
+        ]
+      }
+    },
+    "query": "INSERT INTO artist_art (artist_id, art_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
   }
 }
