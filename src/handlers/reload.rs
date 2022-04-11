@@ -1,6 +1,7 @@
 use std::{
     path::Path,
-    fs::read_dir,
+    fs::{File, read_dir},
+    io::Write,
     time::Duration,
 };
 use axum::{
@@ -12,10 +13,12 @@ use sqlx::{
     postgres::PgPool,
     types::time::PrimitiveDateTime
 };
+use async_recursion::async_recursion;
 use id3::TagLike;
 use metaflac;
 use mp3_duration;
-use async_recursion::async_recursion;
+use blake3;
+use anyhow::{Context, Result};
 use crate::{
     utils::{SharedState, Config, internal_error},
     handlers::{DBTrack, RECOGNIZED_EXTENSIONS},
@@ -31,6 +34,7 @@ struct TrackInfo {
     track_number: u32,
     disc_number: u32,
     length_seconds: u64,
+    art: Option<Vec<u8>>,
     path_str: String,
     last_modified: PrimitiveDateTime,
 }
@@ -69,8 +73,8 @@ pub async fn hard_reload_handler(
 
 // load database metadata from path
 async fn load_db(config: Config, pool: PgPool) -> Result<(), BoxError> {    
-    update_old_metadata(pool.clone()).await?;
-    load_new_metadata(pool.clone(), &config.music_directory).await
+    update_old_metadata(pool.clone(), &config.art_directory).await?;
+    load_new_metadata(pool.clone(), &config.music_directory, &config.art_directory).await
 }
 
 // wipe the database
@@ -96,7 +100,7 @@ async fn clear_data(pool: PgPool) -> Result<(), BoxError> {
 }
 
 // update old metadata from files that have been changed, or files that have been deleted
-async fn update_old_metadata(pool: PgPool) -> Result<(), BoxError> {
+async fn update_old_metadata(pool: PgPool, art_dir: &str) -> Result<(), BoxError> {
     // get all paths
     let tracks = sqlx::query_as!(DBTrack, "SELECT * FROM track")
         .fetch_all(&pool)
@@ -118,7 +122,7 @@ async fn update_old_metadata(pool: PgPool) -> Result<(), BoxError> {
             if last_modified < new_modified {
                 // update metadata if track's modified time is later
                 delete_track(pool.clone(), track_id).await?;
-                add_track_from_path(pool.clone(), path_str).await?;
+                add_track_from_path(pool.clone(), path_str, art_dir).await?;
             }
         }
     };
@@ -129,7 +133,7 @@ async fn update_old_metadata(pool: PgPool) -> Result<(), BoxError> {
 // load new metadata from given music directory path
 // basically recursively going down the directory then calling add_track_from_path on audio files
 #[async_recursion]
-async fn load_new_metadata(pool: PgPool, music_dir: &str) -> Result<(), BoxError> {
+async fn load_new_metadata(pool: PgPool, music_dir: &str, art_dir: &str) -> Result<(), BoxError> {
     let path = Path::new(music_dir);
 
     let extension = path.extension();
@@ -137,7 +141,7 @@ async fn load_new_metadata(pool: PgPool, music_dir: &str) -> Result<(), BoxError
         Some(ext) => {
             // if extension is recognized we add the music track
             if RECOGNIZED_EXTENSIONS.iter().any(|i| *i == ext.to_str().expect("Path isn't a valid UTF-8 string")) {
-                add_track_from_path(pool.clone(), music_dir).await?;
+                add_track_from_path(pool.clone(), music_dir, art_dir).await?;
             } // otherwise it's an unrecognized extension
         },
         None => {
@@ -148,7 +152,8 @@ async fn load_new_metadata(pool: PgPool, music_dir: &str) -> Result<(), BoxError
                     let entry = entry?;
                     load_new_metadata(
                         pool.clone(), 
-                        entry.path().to_str().ok_or("Path isn't a valid UTF-8 string")?
+                        entry.path().to_str().ok_or("Path isn't a valid UTF-8 string")?,
+                        art_dir,
                     ).await?;
                 }
             } // otherwise ignore
@@ -160,7 +165,7 @@ async fn load_new_metadata(pool: PgPool, music_dir: &str) -> Result<(), BoxError
 
 // given a path to a track, add the track's metadata to the database
 // if path's track already in the database, it's assumed the track is correct, so we skip it
-async fn add_track_from_path(pool: PgPool, path_str: &str) -> Result<(), BoxError> {
+async fn add_track_from_path(pool: PgPool, path_str: &str, art_dir: &str) -> Result<(), BoxError> {
     // check if track is already in database
     // procesing 
     let already_exists = sqlx::query_scalar!("SELECT (track_id) FROM track WHERE path = ($1)", path_str)
@@ -183,6 +188,22 @@ async fn add_track_from_path(pool: PgPool, path_str: &str) -> Result<(), BoxErro
     match extension {
         "mp3" => {
             let tag = id3::Tag::read_from_path(path)?;
+
+            // get picture
+            let mut pictures_iter = tag.pictures();
+            let mut picture = None;
+            loop {
+                if let Some(picture_curr) = pictures_iter.next() {
+                    if picture_curr.picture_type == id3::frame::PictureType::CoverFront {
+                        // if cover front we can stop
+                        picture = Some(picture_curr.data.clone());
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+
             let track_info = TrackInfo {
                 track_name: tag.title().unwrap_or("").to_string(),
                 artist_name: tag.artist().unwrap_or("").to_string(),
@@ -191,10 +212,11 @@ async fn add_track_from_path(pool: PgPool, path_str: &str) -> Result<(), BoxErro
                 track_number: tag.track().unwrap_or(0),
                 disc_number: tag.disc().unwrap_or(0),
                 length_seconds: mp3_duration::from_path(path).unwrap_or(Duration::new(0, 0)).as_secs(),
+                art: picture,
                 path_str: path_str.to_string(),
                 last_modified: last_modified,
             };
-            add_track_from_info(pool.clone(), track_info).await?;
+            add_track_from_info(pool.clone(), track_info, art_dir).await?;
         },
         "flac" => {
             let tag = metaflac::Tag::read_from_path(path)?;
@@ -208,6 +230,22 @@ async fn add_track_from_path(pool: PgPool, path_str: &str) -> Result<(), BoxErro
                 track_length = 0;
             };
 
+            // get picture
+            // exact same interface as id3 apparently
+            let mut pictures_iter = tag.pictures();
+            let mut picture = None;
+            loop {
+                if let Some(picture_curr) = pictures_iter.next() {
+                    if picture_curr.picture_type == metaflac::block::PictureType::CoverFront {
+                        // if cover front we can stop
+                        picture = Some(picture_curr.data.clone());
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+
             match tag.vorbis_comments() {
                 Some(x) => {
                     track_info = TrackInfo {
@@ -218,6 +256,7 @@ async fn add_track_from_path(pool: PgPool, path_str: &str) -> Result<(), BoxErro
                         track_number: x.comments.get("TRACKNUMBER").unwrap_or(&Vec::new()).get(0).unwrap_or(&"0".to_string()).to_string().parse::<u32>()?,
                         disc_number: x.comments.get("DISCNUMBER").unwrap_or(&Vec::new()).get(0).unwrap_or(&"0".to_string()).to_string().parse::<u32>()?,
                         length_seconds: track_length,
+                        art: picture,
                         path_str: path_str.to_string(),
                         last_modified: last_modified,
                     };
@@ -231,13 +270,14 @@ async fn add_track_from_path(pool: PgPool, path_str: &str) -> Result<(), BoxErro
                         track_number: 0,
                         disc_number: 0,
                         length_seconds: track_length,
+                        art: picture,
                         path_str: path_str.to_string(),
                         last_modified: last_modified,
                     };
                 }
             }
 
-            add_track_from_info(pool.clone(), track_info).await?;
+            add_track_from_info(pool.clone(), track_info, art_dir).await?;
         },
         _ => Err(format!("File at {0} has unsupported extension {1}", path_str, extension))?,
     };
@@ -246,7 +286,7 @@ async fn add_track_from_path(pool: PgPool, path_str: &str) -> Result<(), BoxErro
 }
 
 // given all track's information, add the track to the db
-async fn add_track_from_info(pool: PgPool, track_info: TrackInfo) -> Result<(), BoxError> {
+async fn add_track_from_info(pool: PgPool, track_info: TrackInfo, art_dir: &str) -> Result<(), BoxError> {
     // trim null characters from texts
     let clean_track_name = track_info.track_name.trim_matches(char::from(0));
     let clean_artist_name = track_info.artist_name.trim_matches(char::from(0));
@@ -261,6 +301,50 @@ async fn add_track_from_info(pool: PgPool, track_info: TrackInfo) -> Result<(), 
         track_info.length_seconds as i32)
         .fetch_one(&pool)
         .await?;
+
+    // insert new art if there is one
+    let mut art_id = None;
+    if let Some(art) = track_info.art {
+        // calculate hash
+        let art_hash = blake3::hash(&art);
+        let art_hash_bytes = art_hash.as_bytes().to_vec();
+
+        // check if hash in database
+        let existing_art_id = sqlx::query_scalar!("SELECT art_id FROM art \
+            WHERE hash = ($1)",
+            art_hash_bytes)
+            .fetch_optional(&pool)
+            .await?;
+
+        if existing_art_id.is_some() {
+            // if already in database use that one instead
+            art_id = Some(existing_art_id.unwrap()); // guarantee to not be none
+        } else {
+            // else insert new art
+            // write to directory
+            let new_art_name = art_hash.to_hex().to_string();
+            let new_art_directory = format!("{0}/{1}", art_dir, new_art_name);
+            let mut file = File::create(&new_art_directory)
+                .context(format!("Creation of {} error. Maybe the arts directory in config.json does not exist?", &new_art_directory))?;
+            file.write_all(&art)?;
+
+            // insert to db
+            art_id = Some(
+                sqlx::query_scalar!("INSERT INTO art (hash, path) VALUES ($1, $2) RETURNING art_id",
+                art_hash_bytes, &new_art_directory)
+                .fetch_one(&pool)
+                .await?
+            );
+        };
+    };
+
+    // if there is art connect it with track
+    if let Some(curr_art_id) = art_id {
+        sqlx::query!("INSERT INTO track_art (track_id, art_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            track_id, curr_art_id)
+            .execute(&pool)
+            .await?;
+    };
     
     // insert artist if artist not in database. there is an unique constraint on artist_name
     let artist_id = insert_artist_from_name(pool.clone(), clean_artist_name).await?;
@@ -272,6 +356,15 @@ async fn add_track_from_info(pool: PgPool, track_info: TrackInfo) -> Result<(), 
         artist_id, track_id)
         .execute(&pool)
         .await?;
+
+    // update artistart table if not already in database
+    // similarly, artist_id is unique in artist_art table
+    if let Some(curr_art_id) = art_id {
+        sqlx::query!("INSERT INTO artist_art (artist_id, art_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            artist_id, curr_art_id)
+            .execute(&pool)
+            .await?;
+    };
         
     // insert album. note that album with same name by different artists should be treated
     // as different albums
@@ -315,6 +408,14 @@ async fn add_track_from_info(pool: PgPool, track_info: TrackInfo) -> Result<(), 
         album_id, track_id, track_info.track_number as i32, track_info.disc_number as i32)
         .execute(&pool)
         .await?;
+
+    // insert into album_art table
+    if let Some(curr_art_id) = art_id {
+        sqlx::query!("INSERT INTO album_art (album_id, art_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            album_id, curr_art_id)
+            .execute(&pool)
+            .await?;
+    };
 
     Ok(())
 }

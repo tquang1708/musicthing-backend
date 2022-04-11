@@ -25,6 +25,7 @@ pub struct Config {
     pub concurrency_limit: usize,
     pub timeout_seconds: u64,
     pub music_directory: String,
+    pub art_directory: String,
 }
 
 // parse then return config
@@ -36,8 +37,9 @@ pub fn parse_cfg() -> Result<Config, BoxError> {
             // path found
             config = serde_json::from_reader(BufReader::new(File::open(path)?))?;
 
-            // expand music_directory
+            // expand music_directory and art_directory
             config.music_directory = shellexpand::full(&config.music_directory)?.to_string();
+            config.art_directory = shellexpand::full(&config.art_directory)?.to_string();
         },
         None => {
             // no path found - load default config
@@ -50,7 +52,8 @@ pub fn parse_cfg() -> Result<Config, BoxError> {
                 db_connection_timeout_seconds: 3,
                 concurrency_limit: 1024,
                 timeout_seconds: 60,
-                music_directory: "../music-directory".to_string(),
+                music_directory: "../music".to_string(),
+                art_directory: "./art".to_string(),
             };
             println!("No config.json found. Using default config.");
             println!("{:#?}", config);
@@ -124,6 +127,7 @@ pub struct ListRoot {
 pub struct ListAlbum {
     pub name: String,
     pub album_artist_name: String,
+    pub album_art_path: String,
     pub discs: Vec<ListDisc>,
 }
 

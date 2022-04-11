@@ -82,7 +82,7 @@ async fn generate_root(config: Config, pool: PgPool) -> Result<Option<ListRoot>,
                         artist: track.artist_name.clone().unwrap_or("Unknown Artist".to_string()),
                         name: track.track_name.clone().unwrap_or("Untitled".to_string()),
                         path: Path::new(&track.path)
-                            .strip_prefix(config.music_directory.clone())
+                            .strip_prefix(&config.music_directory)
                             .expect("audio file not part of music directory")
                             .to_string_lossy().into_owned(),
                         length_seconds: track.length_seconds,
@@ -104,10 +104,29 @@ async fn generate_root(config: Config, pool: PgPool) -> Result<Option<ListRoot>,
                 .fetch_one(&pool)
                 .await?;
 
+            // get album art path
+            let album_art_path_optional = sqlx::query_scalar!("SELECT path FROM art \
+                JOIN album_art ON (album_art.art_id = art.art_id) \
+                JOIN album ON (album.album_id = album_art.album_id) \
+                WHERE album.album_id = ($1)", album.album_id)
+                .fetch_optional(&pool)
+                .await?;
+            
+            let album_art_path_actual;
+            if let Some(album_art_path) = album_art_path_optional {
+                album_art_path_actual = Path::new(&album_art_path)
+                    .strip_prefix(&config.art_directory)
+                    .expect("art path not in current art directory")
+                    .to_string_lossy().into_owned();
+            } else {
+                album_art_path_actual = "".to_string();
+            }
+
             // construct album_struct
             let album_struct = ListAlbum {
                 name: album.album_name.clone().unwrap_or("Unknown Album".to_string()),
                 album_artist_name: album_artist_name.unwrap_or("Unknown Artist".to_string()),
+                album_art_path: album_art_path_actual,
                 discs: disc_structs,
             };
             album_structs.push(album_struct);

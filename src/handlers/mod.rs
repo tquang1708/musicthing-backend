@@ -7,6 +7,7 @@ pub mod play;
 
 // structs for interfacing with the database
 #[derive(sqlx::FromRow, Debug)]
+#[allow(dead_code)]
 pub struct DBTrack {
     track_id: i32,
     track_name: Option<String>,
@@ -16,15 +17,25 @@ pub struct DBTrack {
 }
 
 #[derive(sqlx::FromRow, Debug)]
+#[allow(dead_code)]
 pub struct DBArtist {
     artist_id: i32,
     artist_name: Option<String>,
 }
 
 #[derive(sqlx::FromRow, Debug)]
+#[allow(dead_code)]
 pub struct DBAlbum {
     album_id: i32,
     album_name: Option<String>,
+}
+
+#[derive(sqlx::FromRow, Debug)]
+#[allow(dead_code)]
+pub struct DBArt {
+    art_id: i32,
+    hash: Vec<u8>,
+    path: String,
 }
 
 // constant vector of recognized extensions

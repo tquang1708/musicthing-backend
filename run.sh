@@ -10,15 +10,15 @@ case $option in
         echo "Setting up tables."
         psql -d musicthing-metadb -f musicthing_metadb_init.sql
 
-        echo "Creating default music directory at ../music-directory."
+        echo "Creating default music directory at ../music"
+        echo "The backend will pick up music files stored in here."
+        echo "Currently only supports .mp3/.flac"
         read -n1 -p "Proceed? (yY/nN)" default_music_dir
         echo
         case $default_music_dir in
         y|Y)
-            echo "Creating music directory at ../music-directory if doesn't already exist."
-            echo "Move your music files here for the backend to pick up."
-            echo "Currently only supports .mp3/.flac"
-            mkdir -p "../music-directory"
+            echo "Creating music directory at ../music if doesn't already exist."
+            mkdir -p "../music"
             ;;
         *)
             echo "Skipping creation of music directory."
@@ -26,6 +26,10 @@ case $option in
             echo "config.json before starting up the backend."
             ;;
         esac
+
+        echo "Creating default art directory at ./art"
+        echo "Arts used for display on frontend will be stored here."
+        mkdir -p "./art"
 
         echo "Generating cert.pem and key.pem for TLS protocol for HTTPS"
         read -n1 -p "Proceed? (yY/nN)" generate_pem

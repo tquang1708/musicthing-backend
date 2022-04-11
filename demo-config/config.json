@@ -1,5 +1,5 @@
 {
-    "database_connection_str": "postgres://postgres:password@localhost/musicthing-metadb",
+    "database_connection_str": "postgres://postgres:password@localhost:5432/musicthing-metadb",
     "frontend_url": "https://focused-keller-48c7e8.netlify.app",
     "backend_socket_addr": "0.0.0.0:8000",
     "use_tls": true,
@@ -7,5 +7,6 @@
     "db_connection_timeout_seconds": 3,
     "concurrency_limit": 1024,
     "timeout_seconds": 60,
-    "music_directory": "../music-directory/"
+    "music_directory": "../music",
+    "art_directory": "./art"
 }
