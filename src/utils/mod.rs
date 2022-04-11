@@ -139,6 +139,7 @@ pub struct ListTrack {
     pub artist: String,
     pub name: String,
     pub path: String,
+    pub length_seconds: i32,
 }
 
 // Utility function for mapping errors into 500 http response

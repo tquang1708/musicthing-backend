@@ -791,6 +791,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mp3-duration"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "348bdc7300502f0801e5b57c448815713cd843b744ef9bda252a2698fdf90a0f"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "musicthing"
 version = "0.1.0"
 dependencies = [
@@ -803,6 +812,7 @@ dependencies = [
  "hyper",
  "id3",
  "metaflac",
+ "mp3-duration",
  "serde",
  "serde_json",
  "shellexpand",

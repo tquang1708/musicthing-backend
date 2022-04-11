@@ -120,7 +120,8 @@ CREATE TABLE public.track (
     track_id integer NOT NULL,
     track_name text,
     path text NOT NULL,
-    last_modified timestamp without time zone NOT NULL
+    last_modified timestamp without time zone NOT NULL,
+    length_seconds integer NOT NULL
 );
 
 

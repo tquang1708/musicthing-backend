@@ -67,7 +67,7 @@ async fn generate_root(config: Config, pool: PgPool) -> Result<Option<ListRoot>,
             let mut disc_structs = Vec::new();
             for disc in discs.iter() {
                 // gather all tracks on disc
-                let tracks = sqlx::query!("SELECT track_no, artist_name, track_name, path FROM track \
+                let tracks = sqlx::query!("SELECT track_no, artist_name, track_name, path, length_seconds FROM track \
                     JOIN artist_track ON (track.track_id = artist_track.track_id) \
                     JOIN artist ON (artist_track.artist_id = artist.artist_id) \
                     JOIN album_track ON (track.track_id = album_track.track_id) \
@@ -85,6 +85,7 @@ async fn generate_root(config: Config, pool: PgPool) -> Result<Option<ListRoot>,
                             .strip_prefix(config.music_directory.clone())
                             .expect("audio file not part of music directory")
                             .to_string_lossy().into_owned(),
+                        length_seconds: track.length_seconds,
                     }).collect();
 
                 // construct disc_struct

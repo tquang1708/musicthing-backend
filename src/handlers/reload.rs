@@ -1,6 +1,7 @@
 use std::{
     path::Path,
     fs::read_dir,
+    time::Duration,
 };
 use axum::{
     http::StatusCode,
@@ -13,6 +14,7 @@ use sqlx::{
 };
 use id3::TagLike;
 use metaflac;
+use mp3_duration;
 use async_recursion::async_recursion;
 use crate::{
     utils::{SharedState, Config, internal_error},
@@ -28,6 +30,7 @@ struct TrackInfo {
     album_artist_name: String,
     track_number: u32,
     disc_number: u32,
+    length_seconds: u64,
     path_str: String,
     last_modified: PrimitiveDateTime,
 }
@@ -187,6 +190,7 @@ async fn add_track_from_path(pool: PgPool, path_str: &str) -> Result<(), BoxErro
                 album_artist_name: tag.album_artist().unwrap_or("").to_string(),
                 track_number: tag.track().unwrap_or(0),
                 disc_number: tag.disc().unwrap_or(0),
+                length_seconds: mp3_duration::from_path(path).unwrap_or(Duration::new(0, 0)).as_secs(),
                 path_str: path_str.to_string(),
                 last_modified: last_modified,
             };
@@ -194,34 +198,46 @@ async fn add_track_from_path(pool: PgPool, path_str: &str) -> Result<(), BoxErro
         },
         "flac" => {
             let tag = metaflac::Tag::read_from_path(path)?;
+            let track_info: TrackInfo;
+
+            // get length
+            let track_length;
+            if let Some(streaminfo) = tag.get_streaminfo() {
+                track_length = streaminfo.total_samples / streaminfo.sample_rate as u64;
+            } else {
+                track_length = 0;
+            };
+
             match tag.vorbis_comments() {
                 Some(x) => {
-                    let track_info = TrackInfo {
+                    track_info = TrackInfo {
                         track_name: x.comments.get("TITLE").unwrap_or(&Vec::new()).get(0).unwrap_or(&"".to_string()).to_string(),
                         artist_name: x.comments.get("ARTIST").unwrap_or(&Vec::new()).get(0).unwrap_or(&"".to_string()).to_string(),
                         album_name: x.comments.get("ALBUM").unwrap_or(&Vec::new()).get(0).unwrap_or(&"".to_string()).to_string(),
                         album_artist_name: x.comments.get("ALBUMARTIST").unwrap_or(&Vec::new()).get(0).unwrap_or(&"".to_string()).to_string(),
                         track_number: x.comments.get("TRACKNUMBER").unwrap_or(&Vec::new()).get(0).unwrap_or(&"0".to_string()).to_string().parse::<u32>()?,
                         disc_number: x.comments.get("DISCNUMBER").unwrap_or(&Vec::new()).get(0).unwrap_or(&"0".to_string()).to_string().parse::<u32>()?,
+                        length_seconds: track_length,
                         path_str: path_str.to_string(),
                         last_modified: last_modified,
                     };
-                    add_track_from_info(pool.clone(), track_info).await?;
                 },
                 None => {
-                    let track_info = TrackInfo {
+                    track_info = TrackInfo {
                         track_name: String::from(""),
                         artist_name: String::from(""),
                         album_name: String::from(""),
                         album_artist_name: String::from(""),
                         track_number: 0,
                         disc_number: 0,
+                        length_seconds: track_length,
                         path_str: path_str.to_string(),
                         last_modified: last_modified,
                     };
-                    add_track_from_info(pool.clone(), track_info).await?;
                 }
             }
+
+            add_track_from_info(pool.clone(), track_info).await?;
         },
         _ => Err(format!("File at {0} has unsupported extension {1}", path_str, extension))?,
     };
@@ -237,12 +253,12 @@ async fn add_track_from_info(pool: PgPool, track_info: TrackInfo) -> Result<(), 
     let clean_album_artist_name = track_info.album_artist_name.trim_matches(char::from(0));
     let clean_album_name = track_info.album_name.trim_matches(char::from(0));
 
-    let track_id = sqlx::query_scalar!("INSERT INTO track (track_name, path, last_modified) \
-        VALUES ($1, $2, $3) RETURNING track_id",
+    let track_id = sqlx::query_scalar!("INSERT INTO track (track_name, path, last_modified, length_seconds) \
+        VALUES ($1, $2, $3, $4) RETURNING track_id",
         clean_track_name,
-        // "X".to_string(),
         track_info.path_str,
-        track_info.last_modified)
+        track_info.last_modified,
+        track_info.length_seconds as i32)
         .fetch_one(&pool)
         .await?;
     

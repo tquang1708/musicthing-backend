@@ -12,6 +12,7 @@ pub struct DBTrack {
     track_name: Option<String>,
     path: String,
     last_modified: PrimitiveDateTime,
+    length_seconds: i32,
 }
 
 #[derive(sqlx::FromRow, Debug)]
