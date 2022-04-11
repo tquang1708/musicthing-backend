@@ -45,9 +45,9 @@ pub fn parse_cfg() -> Result<Config, BoxError> {
             // no path found - load default config
             config = Config {
                 database_connection_str: "postgres://postgres:password@localhost/musicthing-metadb".to_string(),
-                frontend_url: "http://localhost:3000".to_string(),
+                frontend_url: "http://0.0.0.0:3000".to_string(),
                 backend_socket_addr: "0.0.0.0:8000".to_string(),
-                use_tls: false,
+                use_tls: true,
                 max_db_connections: 5,
                 db_connection_timeout_seconds: 3,
                 concurrency_limit: 1024,
