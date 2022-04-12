@@ -64,15 +64,12 @@ fn parse_mp3(path: &Path, path_str: &str, last_modified: PrimitiveDateTime) -> R
         }
     }
 
-    // get artist and album artist - if either one is empty, use the other field
-    let (artist, album_artist) = parse_artist_tags(tag.artist(), tag.album_artist(), "");
-
     Ok(
         TrackInfo {
             track_name: tag.title().unwrap_or("").to_string(),
-            artist_name: artist.to_string(),
+            artist_name: tag.artist().unwrap_or("").to_string(),
             album_name: tag.album().unwrap_or("").to_string(),
-            album_artist_name: album_artist.to_string(),
+            album_artist_name: tag.album_artist().unwrap_or("").to_string(),
             track_number: tag.track().unwrap_or(0),
             disc_number: tag.disc().unwrap_or(0),
             length_seconds: mp3_duration::from_path(path).unwrap_or(Duration::new(0, 0)).as_secs(),
@@ -113,18 +110,11 @@ fn parse_flac(path: &Path, path_str: &str, last_modified: PrimitiveDateTime) -> 
     Ok(
         match tag.vorbis_comments() {
             Some(x) => {
-                // holy hell this library is giving me issues
-                let default_vector = &Vec::new();
-                let (artist, album_artist) = parse_artist_tags(
-                    x.comments.get("ARTIST"),
-                    x.comments.get("ALBUMARTIST"),
-                    default_vector
-                );
                 TrackInfo {
                     track_name: x.comments.get("TITLE").unwrap_or(&Vec::new()).join(", "),
-                    artist_name: artist.join(", "),
+                    artist_name: x.comments.get("ARTIST").unwrap_or(&Vec::new()).join(", "),
                     album_name: x.comments.get("ALBUM").unwrap_or(&Vec::new()).join(", "),
-                    album_artist_name: album_artist.join(", "),
+                    album_artist_name: x.comments.get("ALBUMARTIST").unwrap_or(&Vec::new()).join(", "),
                     track_number: x.comments.get("TRACKNUMBER").unwrap_or(&Vec::new()).get(0).unwrap_or(&"0".to_string()).to_string().parse::<u32>()?,
                     disc_number: x.comments.get("DISCNUMBER").unwrap_or(&Vec::new()).get(0).unwrap_or(&"0".to_string()).to_string().parse::<u32>()?,
                     length_seconds: track_length,
@@ -149,29 +139,4 @@ fn parse_flac(path: &Path, path_str: &str, last_modified: PrimitiveDateTime) -> 
             }
         }
     )
-}
-
-// if artist or album_artist is blank use the value of the other
-fn parse_artist_tags<T: Copy>(artist: Option<T>, album_artist: Option<T>, default: T) -> (T, T) {
-    // get artist and album artist - if either one is empty, use the other field
-    let artist_out;
-    let album_artist_out;
-    if artist.is_none() {
-        if album_artist.is_none() {
-            album_artist_out = default;
-            artist_out = default;
-        } else {
-            album_artist_out = album_artist.unwrap(); // guaranteed to not be none
-            artist_out = album_artist_out;
-        }
-    } else {
-        artist_out = artist.unwrap(); // guaranteed to not be none
-        if album_artist.is_none() {
-            album_artist_out = artist_out;
-        } else {
-            album_artist_out = album_artist.unwrap(); // guaranteed to not be none
-        }
-    };
-
-    (artist_out, album_artist_out)
 }
