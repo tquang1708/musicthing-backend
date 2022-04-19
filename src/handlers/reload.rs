@@ -13,7 +13,6 @@ use sqlx::{
     types::time::PrimitiveDateTime
 };
 use walkdir::WalkDir;
-use async_recursion::async_recursion;
 use blake3;
 use anyhow::{Context, Result};
 
@@ -119,7 +118,6 @@ async fn update_old_metadata(pool: PgPool, art_dir: &str) -> Result<(), BoxError
 
 // load new metadata from given music directory path
 // basically recursively going down the directory then calling add_track_from_path on audio files
-#[async_recursion]
 async fn load_new_metadata(pool: PgPool, music_dir: &str, art_dir: &str) -> Result<(), BoxError> {
     // silently discards of errors
     for dir in WalkDir::new(music_dir).follow_links(true).into_iter().filter_map(|e| e.ok()) {
