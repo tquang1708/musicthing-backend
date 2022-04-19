@@ -1,6 +1,6 @@
 use std::{
     path::Path,
-    fs::{File, read_dir},
+    fs::File,
     io::Write,
 };
 use axum::{
@@ -12,6 +12,7 @@ use sqlx::{
     postgres::PgPool,
     types::time::PrimitiveDateTime
 };
+use walkdir::WalkDir;
 use async_recursion::async_recursion;
 use blake3;
 use anyhow::{Context, Result};
@@ -120,30 +121,20 @@ async fn update_old_metadata(pool: PgPool, art_dir: &str) -> Result<(), BoxError
 // basically recursively going down the directory then calling add_track_from_path on audio files
 #[async_recursion]
 async fn load_new_metadata(pool: PgPool, music_dir: &str, art_dir: &str) -> Result<(), BoxError> {
-    let path = Path::new(music_dir);
-
-    let extension = path.extension();
-    match extension {
-        Some(ext) => {
+    // silently discards of errors
+    for dir in WalkDir::new(music_dir).follow_links(true).into_iter().filter_map(|e| e.ok()) {
+        // only care if it has an extension
+        let extension = dir.path().extension();
+        if let Some(ext) = extension {
             // if extension is recognized we add the music track
-            if RECOGNIZED_EXTENSIONS.iter().any(|i| *i == ext.to_str().expect("Path isn't a valid UTF-8 string")) {
-                add_track_from_path(pool.clone(), music_dir, art_dir).await?;
-            } // otherwise it's an unrecognized extension
-        },
-        None => {
-            // no extension means it can be a directory
-            // if it's a directory, run the command on its subdirectory
-            if path.is_dir() {
-                for entry in read_dir(path)? {
-                    let entry = entry?;
-                    load_new_metadata(
-                        pool.clone(), 
-                        entry.path().to_str().ok_or("Path isn't a valid UTF-8 string")?,
-                        art_dir,
-                    ).await?;
-                }
-            } // otherwise ignore
-        },
+            if RECOGNIZED_EXTENSIONS.iter().any(|i| i == &ext) {
+                add_track_from_path(
+                    pool.clone(), 
+                    dir.path().to_str().expect("Path isn't a valid UTF-8 string"), 
+                    art_dir
+                ).await?;
+            };
+        };
     };
 
     Ok(())
