@@ -1,7 +1,7 @@
 use std::{
-    path::Path,
+    path::{Path, PathBuf},
     time::Duration,
-    fs::File,
+    fs::{File, read, read_dir},
     io::Write,
 };
 use sqlx::{
@@ -15,6 +15,7 @@ use tower::BoxError;
 use id3::TagLike;
 use metaflac;
 use mp3_duration;
+use crate::handlers::IMAGE_EXTENSIONS;
 
 // helper struct
 #[derive(Debug)]
@@ -62,22 +63,29 @@ async fn parse_mp3(path: &Path, path_str: &str, last_modified: PrimitiveDateTime
     // get length
     let track_length = mp3_duration::from_path(path).unwrap_or(Duration::new(0, 0)).as_secs();
 
+    // get image file in parent dir
+    let picture = get_picture_in_dir(path)?;
+
     Ok(
         match tag_optional {
             Some(tag) => {
                 // get picture
                 let mut art_id = None;
-                let mut pictures_iter = tag.pictures();
-                loop {
-                    if let Some(picture_curr) = pictures_iter.next() {
-                        if picture_curr.picture_type == id3::frame::PictureType::CoverFront {
-                            // if cover front we can stop
-                            art_id = Some(get_art_id(&picture_curr.data, pool, art_dir).await?);
+                if let Some(picture_dir) = picture {
+                    art_id = Some(get_art_id(&read(picture_dir)?, pool, art_dir).await?);
+                } else {
+                    let mut pictures_iter = tag.pictures();
+                    loop {
+                        if let Some(picture_curr) = pictures_iter.next() {
+                            if picture_curr.picture_type == id3::frame::PictureType::CoverFront {
+                                // if cover front we can stop
+                                art_id = Some(get_art_id(&picture_curr.data, pool, art_dir).await?);
+                                break;
+                            }
+                        } else {
                             break;
                         }
-                    } else {
-                        break;
-                    }
+                    };
                 };
 
                 TrackInfo {
@@ -112,6 +120,9 @@ async fn parse_mp3(path: &Path, path_str: &str, last_modified: PrimitiveDateTime
 }
 
 async fn parse_flac(path: &Path, path_str: &str, last_modified: PrimitiveDateTime, pool: &PgPool, art_dir: &str) -> Result<TrackInfo, BoxError> {
+    // get image file in parent dir
+    let picture = get_picture_in_dir(path)?;
+
     // get tag
     let tag_optional = metaflac::Tag::read_from_path(path).ok();
     
@@ -129,17 +140,21 @@ async fn parse_flac(path: &Path, path_str: &str, last_modified: PrimitiveDateTim
                 // get pictures
                 // exact same interface as id3 apparently for pictures
                 let mut art_id = None;
-                let mut pictures_iter = tag.pictures();
-                loop {
-                    if let Some(picture_curr) = pictures_iter.next() {
-                        if picture_curr.picture_type == metaflac::block::PictureType::CoverFront {
-                            // if cover front we can stop
-                            art_id = Some(get_art_id(&picture_curr.data, pool, art_dir).await?);
+                if let Some(picture_dir) = picture {
+                    art_id = Some(get_art_id(&read(picture_dir)?, pool, art_dir).await?);
+                } else {
+                    let mut pictures_iter = tag.pictures();
+                    loop {
+                        if let Some(picture_curr) = pictures_iter.next() {
+                            if picture_curr.picture_type == metaflac::block::PictureType::CoverFront {
+                                // if cover front we can stop
+                                art_id = Some(get_art_id(&picture_curr.data, pool, art_dir).await?);
+                                break;
+                            }
+                        } else {
                             break;
                         }
-                    } else {
-                        break;
-                    }
+                    };
                 };
 
                 match tag.vorbis_comments() {
@@ -189,6 +204,25 @@ async fn parse_flac(path: &Path, path_str: &str, last_modified: PrimitiveDateTim
             }
         }
     )
+}
+
+// get an image file in the current directory
+fn get_picture_in_dir(path: &Path) -> Result<Option<PathBuf>, BoxError> {
+    // get parent
+    let parent = path.parent().unwrap(); // since this is called in parse_mp3/flac, this is guaranteed to not be a directory
+
+    // find first image
+    for dir in read_dir(parent)? {
+        let path = dir?.path();
+        if let Some(ext) = path.extension() {
+            if IMAGE_EXTENSIONS.iter().any(|i| i == &ext) {
+                return Ok(Some(path.to_path_buf()));
+            }
+        }
+    }
+
+    // else return none
+    Ok(None)
 }
 
 // check if picture's already in the database
