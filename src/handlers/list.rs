@@ -141,7 +141,7 @@ async fn generate_root(pool: &PgPool) -> Result<Option<ListRoot>, BoxError> {
     }
 }
 
-pub async fn list_album_handler(
+pub async fn list_albums_handler(
     Extension(pool): Extension<PgPool>,
     Extension(state): Extension<SharedState>,
 ) -> Result<Json<Option<Vec<ListAlbum>>>, (StatusCode, String)> {
@@ -155,7 +155,7 @@ pub async fn list_album_handler(
 
     // if function did not early return in previous step this means list cache is outdated
     // update state with new list cache
-    let new_list_album_cache = list_album(&pool).await.map_err(internal_error)?;
+    let new_list_album_cache = list_albums(&pool).await.map_err(internal_error)?;
     state.write().await.list_album_cache = new_list_album_cache.clone();
     state.write().await.list_album_cache_outdated = false;
 
@@ -163,7 +163,7 @@ pub async fn list_album_handler(
     Ok(Json(new_list_album_cache))
 }
 
-async fn list_album(pool: &PgPool) -> Result<Option<Vec<ListAlbum>>, BoxError> {
+async fn list_albums(pool: &PgPool) -> Result<Option<Vec<ListAlbum>>, BoxError> {
     // query all relevant information
     let albums = sqlx::query_as!(ListAlbum, "SELECT DISTINCT 
         album.album_id as id, 

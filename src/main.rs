@@ -65,7 +65,7 @@ async fn main() -> Result<(), BoxError> {
         .route("/api/reload", get(reload::reload_handler))
         .route("/api/hard_reload", get(reload::hard_reload_handler))
         .route("/api/list", get(list::list_handler))
-        .route("/api/list/album", get(list::list_album_handler))
+        .route("/api/list/albums", get(list::list_albums_handler))
         .layer(Extension(pool))
         .layer(Extension(config.clone()))
         .layer(Extension(SharedState::default()))
@@ -99,7 +99,7 @@ async fn main() -> Result<(), BoxError> {
                 .layer(HandleErrorLayer::new(handle_error))
                 .load_shed()
                 .concurrency_limit(config.concurrency_limit)
-                .timeout(Duration::from_secs(config.timeout_seconds))
+                // .timeout(Duration::from_secs(config.timeout_seconds))
                 .layer(TraceLayer::new_for_http())
                 .into_inner(),
         );
