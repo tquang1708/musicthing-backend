@@ -15,7 +15,10 @@ use tower::BoxError;
 use id3::TagLike;
 use metaflac;
 use mp3_duration;
-use crate::handlers::IMAGE_EXTENSIONS;
+use crate::{
+    handlers::IMAGE_EXTENSIONS,
+    utils::Config
+};
 
 // helper struct
 #[derive(Debug)]
@@ -32,39 +35,46 @@ pub struct TrackInfo {
     pub last_modified: PrimitiveDateTime,
 }
 
-pub async fn parse_tag(path_str: &str, pool: &PgPool, art_dir: &str) -> Result<TrackInfo, BoxError> {
+pub async fn parse_tag(pool: &PgPool, config: &Config, path: &Path) -> Result<TrackInfo, BoxError> {
     // get track's last modified date
-    let path = Path::new(path_str);
-    let last_modified = PrimitiveDateTime::from(path.metadata()?.modified()?);
+    let path_full = Path::new(&config.music_directory).join(path);
+    let last_modified = PrimitiveDateTime::from(path_full.metadata()?.modified()?);
 
     // read relevant tags information
     // supporting only mp3 and flac for now
     let extension = path
-        .extension().ok_or(format!("File at {} has no extension", path_str))?
-        .to_str().ok_or(format!("File at {} has invalid extension", path_str))?;
+        .extension()
+        .ok_or(format!("File at {} has no extension", path.to_string_lossy()))?
+        .to_str();
 
     match extension {
-        "mp3" => {
-            parse_mp3(path, path_str, last_modified, pool, art_dir).await
+        Some("mp3") => {
+            parse_mp3(pool, path, &path_full, last_modified, &config.art_directory).await
         },
-        "flac" => {
-            parse_flac(path, path_str, last_modified, pool, art_dir).await
+        Some("flac") => {
+            parse_flac(pool, path, &path_full, last_modified, &config.art_directory).await
         },
         _ => {
-            Err(format!("File at {0} has unsupported extension {1}", path_str, extension))?
+            Err(format!("File at {0} has unsupported extension", path.to_string_lossy()))?
         },
     }
 }
 
-async fn parse_mp3(path: &Path, path_str: &str, last_modified: PrimitiveDateTime, pool: &PgPool, art_dir: &str) -> Result<TrackInfo, BoxError> {
+async fn parse_mp3(
+    pool: &PgPool, 
+    path: &Path, 
+    path_full: &Path,
+    last_modified: PrimitiveDateTime,
+    art_dir: &str
+) -> Result<TrackInfo, BoxError> {
     // get tag
-    let tag_optional = id3::Tag::read_from_path(path).ok();
+    let tag_optional = id3::Tag::read_from_path(path_full).ok();
 
     // get length
-    let track_length = mp3_duration::from_path(path).unwrap_or(Duration::new(0, 0)).as_secs();
+    let track_length = mp3_duration::from_path(path_full).unwrap_or(Duration::new(0, 0)).as_secs();
 
     // get image file in parent dir
-    let picture = get_picture_in_dir(path)?;
+    let picture = get_picture_in_dir(path_full)?;
 
     Ok(
         match tag_optional {
@@ -97,7 +107,7 @@ async fn parse_mp3(path: &Path, path_str: &str, last_modified: PrimitiveDateTime
                     disc_number: tag.disc().unwrap_or(0),
                     length_seconds: track_length,
                     art_id: art_id,
-                    path_str: path_str.to_string(),
+                    path_str: path.to_string_lossy().to_string(),
                     last_modified: last_modified,
                 }
             },
@@ -111,7 +121,7 @@ async fn parse_mp3(path: &Path, path_str: &str, last_modified: PrimitiveDateTime
                     disc_number: 0,
                     length_seconds: track_length,
                     art_id: None,
-                    path_str: path_str.to_string(),
+                    path_str: path.to_string_lossy().to_string(),
                     last_modified: last_modified,
                 }
             }             
@@ -119,12 +129,18 @@ async fn parse_mp3(path: &Path, path_str: &str, last_modified: PrimitiveDateTime
     )
 }
 
-async fn parse_flac(path: &Path, path_str: &str, last_modified: PrimitiveDateTime, pool: &PgPool, art_dir: &str) -> Result<TrackInfo, BoxError> {
+async fn parse_flac(
+    pool: &PgPool, 
+    path: &Path, 
+    path_full: &Path,
+    last_modified: PrimitiveDateTime,
+    art_dir: &str
+) -> Result<TrackInfo, BoxError> {
     // get image file in parent dir
-    let picture = get_picture_in_dir(path)?;
+    let picture = get_picture_in_dir(path_full)?;
 
     // get tag
-    let tag_optional = metaflac::Tag::read_from_path(path).ok();
+    let tag_optional = metaflac::Tag::read_from_path(path_full).ok();
     
     Ok(
         match tag_optional {
@@ -168,7 +184,7 @@ async fn parse_flac(path: &Path, path_str: &str, last_modified: PrimitiveDateTim
                             disc_number: comment.comments.get("DISCNUMBER").unwrap_or(&Vec::new()).get(0).unwrap_or(&"0".to_string()).to_string().parse::<u32>().unwrap_or(0),
                             length_seconds: track_length,
                             art_id: art_id,
-                            path_str: path_str.to_string(),
+                            path_str: path.to_string_lossy().to_string(),
                             last_modified: last_modified,
                         }
                     },
@@ -182,7 +198,7 @@ async fn parse_flac(path: &Path, path_str: &str, last_modified: PrimitiveDateTim
                             disc_number: 0,
                             length_seconds: track_length,
                             art_id: art_id,
-                            path_str: path_str.to_string(),
+                            path_str: path.to_string_lossy().to_string(),
                             last_modified: last_modified,
                         }   
                     }
@@ -198,7 +214,7 @@ async fn parse_flac(path: &Path, path_str: &str, last_modified: PrimitiveDateTim
                     disc_number: 0,
                     length_seconds: 0,
                     art_id: None,
-                    path_str: path_str.to_string(),
+                    path_str: path.to_string_lossy().to_string(),
                     last_modified: last_modified,
                 }
             }
@@ -255,7 +271,7 @@ async fn get_art_id(picture_data: &[u8], pool: &PgPool, art_dir: &str) -> Result
 
         // insert to db
         art_id = sqlx::query_scalar!("INSERT INTO art (hash, path) VALUES ($1, $2) RETURNING art_id",
-            art_hash_bytes, &new_art_directory)
+            art_hash_bytes, new_art_name)
             .fetch_one(pool)
             .await?;
     };

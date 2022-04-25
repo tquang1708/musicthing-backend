@@ -65,6 +65,7 @@ async fn main() -> Result<(), BoxError> {
         .route("/api/reload", get(reload::reload_handler))
         .route("/api/hard_reload", get(reload::hard_reload_handler))
         .route("/api/list", get(list::list_handler))
+        .route("/api/list/album", get(list::list_album_handler))
         .layer(Extension(pool))
         .layer(Extension(config.clone()))
         .layer(Extension(SharedState::default()))

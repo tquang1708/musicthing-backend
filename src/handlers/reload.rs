@@ -25,10 +25,12 @@ pub async fn reload_handler(
     Extension(state): Extension<SharedState>
 ) -> Result<(), (StatusCode, String)> {
     // load data
-    load_db(config, &pool).await.map_err(internal_error)?;
+    load_db(&pool, &config).await.map_err(internal_error)?;
 
     // update shared state to mark that the list cache is outdated
     state.write().await.list_cache_outdated = true;
+    state.write().await.list_album_cache_outdated = true;
+
     Ok(())
 }
 
@@ -42,18 +44,13 @@ pub async fn hard_reload_handler(
     clear_data(&pool).await.map_err(internal_error)?;
 
     // load data
-    load_db(config, &pool).await.map_err(internal_error)?;
+    load_db(&pool, &config).await.map_err(internal_error)?;
 
     // update shared state to mark that the list cache is outdated
     state.write().await.list_cache_outdated = true;
+    state.write().await.list_album_cache_outdated = true;
 
     Ok(())
-}
-
-// load database metadata from path
-async fn load_db(config: Config, pool: &PgPool) -> Result<(), BoxError> {    
-    update_old_metadata(pool, &config.art_directory).await?;
-    load_new_metadata(pool, &config.music_directory, &config.art_directory).await
 }
 
 // wipe the database
@@ -78,8 +75,15 @@ async fn clear_data(pool: &PgPool) -> Result<(), BoxError> {
     Ok(())
 }
 
+// load database metadata from path
+async fn load_db(pool: &PgPool, config: &Config) -> Result<(), BoxError> {    
+    update_old_metadata(pool, config).await?;
+    load_new_metadata(pool, config).await?;
+    Ok(())
+}
+
 // update old metadata from files that have been changed, or files that have been deleted
-async fn update_old_metadata(pool: &PgPool, art_dir: &str) -> Result<(), BoxError> {
+async fn update_old_metadata(pool: &PgPool, config: &Config) -> Result<(), BoxError> {
     // struct for interfacing with the database
     struct DBTrack {
         track_id: i32,
@@ -94,21 +98,21 @@ async fn update_old_metadata(pool: &PgPool, art_dir: &str) -> Result<(), BoxErro
 
     // iterate over paths, delete tracks that are invalid and update tracks with differing last modified date
     for track in tracks.iter() {
-        let path_str = track.path.as_str();
-        let path = Path::new(path_str);
+        let path = Path::new(&track.path);
+        let path_full = Path::new(&config.music_directory).join(path);
         let track_id = track.track_id;
         let last_modified = track.last_modified;
 
-        if !path.exists() {
+        if !path_full.exists() {
             // delete metadata if track no longer exists
             delete_track(pool, track_id).await?;
         } 
         else {
-            let new_modified = PrimitiveDateTime::from(path.metadata()?.modified()?);
+            let new_modified = PrimitiveDateTime::from(path_full.metadata()?.modified()?);
             if last_modified < new_modified {
                 // update metadata if track's modified time is later
                 delete_track(pool, track_id).await?;
-                add_track_from_path(pool, path_str, art_dir).await?;
+                add_track_from_path(pool, config, path).await?;
             }
         }
     };
@@ -118,18 +122,17 @@ async fn update_old_metadata(pool: &PgPool, art_dir: &str) -> Result<(), BoxErro
 
 // load new metadata from given music directory path
 // basically recursively going down the directory then calling add_track_from_path on audio files
-async fn load_new_metadata(pool: &PgPool, music_dir: &str, art_dir: &str) -> Result<(), BoxError> {
+async fn load_new_metadata(pool: &PgPool, config: &Config) -> Result<(), BoxError> {
     // silently discards of errors
-    for dir in WalkDir::new(music_dir).follow_links(true).into_iter().filter_map(|e| e.ok()) {
+    for dir in WalkDir::new(&config.music_directory).follow_links(true).into_iter().filter_map(|e| e.ok()) {
         // only care if it has an extension
         let extension = dir.path().extension();
         if let Some(ext) = extension {
             // if extension is recognized we add the music track
             if RECOGNIZED_EXTENSIONS.iter().any(|i| i == &ext) {
                 add_track_from_path(
-                    pool, 
-                    dir.path().to_str().expect("Path isn't a valid UTF-8 string"), 
-                    art_dir
+                    pool, config,
+                    dir.path().strip_prefix(&config.music_directory)?,
                 ).await?;
             };
         };
@@ -140,10 +143,11 @@ async fn load_new_metadata(pool: &PgPool, music_dir: &str, art_dir: &str) -> Res
 
 // given a path to a track, add the track's metadata to the database
 // if path's track already in the database, it's assumed the track is correct, so we skip it
-async fn add_track_from_path(pool: &PgPool, path_str: &str, art_dir: &str) -> Result<(), BoxError> {
+async fn add_track_from_path(pool: &PgPool, config: &Config, path: &Path) -> Result<(), BoxError> {
     // check if track is already in database
     // procesing 
-    let already_exists = sqlx::query_scalar!("SELECT (track_id) FROM track WHERE path = ($1)", path_str)
+    let already_exists = sqlx::query_scalar!("SELECT (track_id) FROM track WHERE path = ($1)",
+        &path.to_string_lossy())
         .fetch_optional(pool)
         .await?;
     if already_exists.is_some() {
@@ -151,7 +155,7 @@ async fn add_track_from_path(pool: &PgPool, path_str: &str, art_dir: &str) -> Re
     };
 
     // parse track's tag then add based on info
-    add_track_from_info(pool, parse_tag(path_str, pool, art_dir).await?).await?;
+    add_track_from_info(pool, parse_tag(pool, config, path).await?).await?;
     Ok(())
 }
 

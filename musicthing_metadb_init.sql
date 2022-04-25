@@ -26,7 +26,7 @@ SET default_table_access_method = heap;
 
 CREATE TABLE public.album (
     album_id integer NOT NULL,
-    album_name text
+    album_name text NOT NULL
 );
 
 
@@ -109,7 +109,7 @@ ALTER SEQUENCE public.art_art_id_seq OWNED BY public.art.art_id;
 
 CREATE TABLE public.artist (
     artist_id integer NOT NULL,
-    artist_name text
+    artist_name text NOT NULL
 );
 
 
@@ -169,7 +169,7 @@ CREATE TABLE public.artist_track (
 
 CREATE TABLE public.track (
     track_id integer NOT NULL,
-    track_name text,
+    track_name text NOT NULL,
     path text NOT NULL,
     last_modified timestamp without time zone NOT NULL,
     length_seconds integer NOT NULL

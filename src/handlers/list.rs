@@ -1,4 +1,3 @@
-use std::path::Path;
 use axum::{
     http::StatusCode,
     response::{Json},
@@ -10,8 +9,9 @@ use sqlx::postgres::PgPool;
 use crate::{
     utils::{
         internal_error,
-        SharedState, Config,
-        ListRoot, ListAlbum, ListDisc, ListTrack},
+        SharedState,
+        ListRoot, ListAlbumDeprecating, ListDisc, ListTrack,
+        ListAlbum},
 };
 
 // if list_cache is outdated based on state, calculate new list_cache and update state
@@ -19,7 +19,6 @@ use crate::{
 #[debug_handler]
 pub async fn list_handler(
     Extension(pool): Extension<PgPool>,
-    Extension(config): Extension<Config>,
     Extension(state): Extension<SharedState>,
 ) -> Result<Json<Option<ListRoot>>, (StatusCode, String)> {
     {
@@ -34,7 +33,7 @@ pub async fn list_handler(
 
     // if function did not early return in previous step this means list cache is outdated
     // update state with new list cache
-    let new_list_cache = generate_root(config, &pool).await.map_err(internal_error)?;
+    let new_list_cache = generate_root(&pool).await.map_err(internal_error)?;
     state.write().await.list_cache = new_list_cache.clone();
 
     // change list_cache_outdated to false to indicate list_cache has been updated
@@ -44,11 +43,11 @@ pub async fn list_handler(
     Ok(Json(new_list_cache))
 }
 
-async fn generate_root(config: Config, pool: &PgPool) -> Result<Option<ListRoot>, BoxError> {
+async fn generate_root(pool: &PgPool) -> Result<Option<ListRoot>, BoxError> {
     // struct for interfacing with the db
     struct DBAlbum {
         album_id: i32,
-        album_name: Option<String>,
+        album_name: String,
     }
 
     // gather all albums with tracks sorted alphabetically
@@ -84,12 +83,9 @@ async fn generate_root(config: Config, pool: &PgPool) -> Result<Option<ListRoot>
 
                 let track_structs = tracks.iter().map(|track| ListTrack {
                         number: track.track_no.unwrap_or(0),
-                        artist: track.artist_name.clone().unwrap_or("Unknown Artist".to_string()),
-                        name: track.track_name.clone().unwrap_or("Untitled".to_string()),
-                        path: Path::new(&track.path)
-                            .strip_prefix(&config.music_directory)
-                            .expect("audio file not part of music directory")
-                            .to_string_lossy().into_owned(),
+                        artist: track.artist_name.clone(),
+                        name: track.track_name.clone(),
+                        path: track.path.clone(),
                         length_seconds: track.length_seconds,
                     }).collect();
 
@@ -119,18 +115,15 @@ async fn generate_root(config: Config, pool: &PgPool) -> Result<Option<ListRoot>
             
             let album_art_path_actual;
             if let Some(album_art_path) = album_art_path_optional {
-                album_art_path_actual = Path::new(&album_art_path)
-                    .strip_prefix(&config.art_directory)
-                    .expect("art path not in current art directory")
-                    .to_string_lossy().into_owned();
+                album_art_path_actual = album_art_path;
             } else {
                 album_art_path_actual = "".to_string();
             }
 
             // construct album_struct
-            let album_struct = ListAlbum {
-                name: album.album_name.clone().unwrap_or("Unknown Album".to_string()),
-                album_artist_name: album_artist_name.unwrap_or("Unknown Artist".to_string()),
+            let album_struct = ListAlbumDeprecating {
+                name: album.album_name.clone(),
+                album_artist_name: album_artist_name,
                 album_art_path: album_art_path_actual,
                 discs: disc_structs,
             };
@@ -146,4 +139,45 @@ async fn generate_root(config: Config, pool: &PgPool) -> Result<Option<ListRoot>
         // otherwise return nothing
         Ok(None)
     }
+}
+
+pub async fn list_album_handler(
+    Extension(pool): Extension<PgPool>,
+    Extension(state): Extension<SharedState>,
+) -> Result<Json<Option<Vec<ListAlbum>>>, (StatusCode, String)> {
+    {
+        let state_read = state.read().await;
+
+        if !state_read.list_album_cache_outdated {
+            return Ok(Json(state_read.list_album_cache.clone())); // only cloning the list_album_cache
+        }
+    }
+
+    // if function did not early return in previous step this means list cache is outdated
+    // update state with new list cache
+    let new_list_album_cache = list_album(&pool).await.map_err(internal_error)?;
+    state.write().await.list_album_cache = new_list_album_cache.clone();
+    state.write().await.list_album_cache_outdated = false;
+
+    // return the appropriate json
+    Ok(Json(new_list_album_cache))
+}
+
+async fn list_album(pool: &PgPool) -> Result<Option<Vec<ListAlbum>>, BoxError> {
+    // query all relevant information
+    let albums = sqlx::query_as!(ListAlbum, "SELECT DISTINCT 
+        album.album_id as id, 
+        album_name as name, 
+        artist_name, 
+        path as art_path FROM album \
+        JOIN artist_album ON (album.album_id = artist_album.album_id) \
+        JOIN artist ON (artist.artist_id = artist_album.artist_id) \
+        JOIN album_art ON (album_art.album_id = album.album_id) \
+        JOIN art ON (album_art.art_id = art.art_id)
+        ORDER BY (album_name)")
+        .fetch_all(pool)
+        .await?;
+
+    // just return
+    Ok(Some(albums))
 }

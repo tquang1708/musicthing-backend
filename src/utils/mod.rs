@@ -107,12 +107,16 @@ pub type SharedState = Arc<RwLock<State>>;
 pub struct State {
     pub list_cache_outdated: bool,
     pub list_cache: Option<ListRoot>,
+    pub list_album_cache_outdated: bool,
+    pub list_album_cache: Option<Vec<ListAlbum>>,
 }
 impl Default for State {
     fn default() -> State {
         return State {
             list_cache_outdated: true,
             list_cache: None,
+            list_album_cache_outdated: true,
+            list_album_cache: None,
         };
     }
 }
@@ -120,11 +124,11 @@ impl Default for State {
 // list json storage struct
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ListRoot {
-    pub albums: Vec<ListAlbum>,
+    pub albums: Vec<ListAlbumDeprecating>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct ListAlbum {
+pub struct ListAlbumDeprecating {
     pub name: String,
     pub album_artist_name: String,
     pub album_art_path: String,
@@ -144,6 +148,15 @@ pub struct ListTrack {
     pub name: String,
     pub path: String,
     pub length_seconds: i32,
+}
+
+// list json storing struct for albums query
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct ListAlbum {
+    pub id: i32,
+    pub name: String,
+    pub artist_name: String,
+    pub art_path: String,
 }
 
 // Utility function for mapping errors into 500 http response

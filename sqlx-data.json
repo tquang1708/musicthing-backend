@@ -51,8 +51,8 @@
       ],
       "nullable": [
         true,
-        true,
-        true,
+        false,
+        false,
         false,
         false
       ],
@@ -75,7 +75,7 @@
         }
       ],
       "nullable": [
-        true
+        false
       ],
       "parameters": {
         "Left": [
@@ -140,6 +140,42 @@
       }
     },
     "query": "SELECT (album.album_id) FROM album JOIN artist_album ON (album.album_id = artist_album.album_id) WHERE album_name = ($1) AND artist_id = ($2)"
+  },
+  "342133fdd4a4e28222ae01fa1a2bd0c7f261145621451ed62c51a525ef5f8747": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "name",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "artist_name",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "art_path",
+          "ordinal": 3,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": []
+      }
+    },
+    "query": "SELECT DISTINCT \n        album.album_id as id, \n        album_name as name, \n        artist_name, \n        path as art_path FROM album JOIN artist_album ON (album.album_id = artist_album.album_id) JOIN artist ON (artist.artist_id = artist_album.artist_id) JOIN album_art ON (album_art.album_id = album.album_id) JOIN art ON (album_art.art_id = art.art_id)\n        ORDER BY (album_name)"
   },
   "915309ddbe4f3d91ef82423099d59772dc5732b89c3019c460a0982e9751ef0c": {
     "describe": {
@@ -395,7 +431,7 @@
       ],
       "nullable": [
         false,
-        true
+        false
       ],
       "parameters": {
         "Left": []
