@@ -1,8 +1,15 @@
 use std::{
     path::Path,
     time::Duration,
+    fs::File,
+    io::Write,
 };
-use sqlx::types::time::PrimitiveDateTime;
+use sqlx::{
+    types::time::PrimitiveDateTime,
+    PgPool
+};
+use blake3;
+use anyhow::{Context, Result};
 use tower::BoxError;
 
 use id3::TagLike;
@@ -19,12 +26,12 @@ pub struct TrackInfo {
     pub track_number: u32,
     pub disc_number: u32,
     pub length_seconds: u64,
-    pub art: Option<Vec<u8>>,
+    pub art_id: Option<i32>,
     pub path_str: String,
     pub last_modified: PrimitiveDateTime,
 }
 
-pub fn parse_tag(path_str: &str) -> Result<TrackInfo, BoxError> {
+pub async fn parse_tag(path_str: &str, pool: &PgPool, art_dir: &str) -> Result<TrackInfo, BoxError> {
     // get track's last modified date
     let path = Path::new(path_str);
     let last_modified = PrimitiveDateTime::from(path.metadata()?.modified()?);
@@ -37,10 +44,10 @@ pub fn parse_tag(path_str: &str) -> Result<TrackInfo, BoxError> {
 
     match extension {
         "mp3" => {
-            parse_mp3(path, path_str, last_modified)
+            parse_mp3(path, path_str, last_modified, pool, art_dir).await
         },
         "flac" => {
-            parse_flac(path, path_str, last_modified)
+            parse_flac(path, path_str, last_modified, pool, art_dir).await
         },
         _ => {
             Err(format!("File at {0} has unsupported extension {1}", path_str, extension))?
@@ -48,7 +55,7 @@ pub fn parse_tag(path_str: &str) -> Result<TrackInfo, BoxError> {
     }
 }
 
-fn parse_mp3(path: &Path, path_str: &str, last_modified: PrimitiveDateTime) -> Result<TrackInfo, BoxError> {
+async fn parse_mp3(path: &Path, path_str: &str, last_modified: PrimitiveDateTime, pool: &PgPool, art_dir: &str) -> Result<TrackInfo, BoxError> {
     // get tag
     let tag_optional = id3::Tag::read_from_path(path).ok();
 
@@ -59,13 +66,13 @@ fn parse_mp3(path: &Path, path_str: &str, last_modified: PrimitiveDateTime) -> R
         match tag_optional {
             Some(tag) => {
                 // get picture
-                let mut picture = None;
+                let mut art_id = None;
                 let mut pictures_iter = tag.pictures();
                 loop {
                     if let Some(picture_curr) = pictures_iter.next() {
                         if picture_curr.picture_type == id3::frame::PictureType::CoverFront {
                             // if cover front we can stop
-                            picture = Some(picture_curr.data.clone());
+                            art_id = Some(get_art_id(&picture_curr.data, pool, art_dir).await?);
                             break;
                         }
                     } else {
@@ -81,7 +88,7 @@ fn parse_mp3(path: &Path, path_str: &str, last_modified: PrimitiveDateTime) -> R
                     track_number: tag.track().unwrap_or(0),
                     disc_number: tag.disc().unwrap_or(0),
                     length_seconds: track_length,
-                    art: picture,
+                    art_id: art_id,
                     path_str: path_str.to_string(),
                     last_modified: last_modified,
                 }
@@ -95,7 +102,7 @@ fn parse_mp3(path: &Path, path_str: &str, last_modified: PrimitiveDateTime) -> R
                     track_number: 0,
                     disc_number: 0,
                     length_seconds: track_length,
-                    art: None,
+                    art_id: None,
                     path_str: path_str.to_string(),
                     last_modified: last_modified,
                 }
@@ -104,7 +111,7 @@ fn parse_mp3(path: &Path, path_str: &str, last_modified: PrimitiveDateTime) -> R
     )
 }
 
-fn parse_flac(path: &Path, path_str: &str, last_modified: PrimitiveDateTime) -> Result<TrackInfo, BoxError> {
+async fn parse_flac(path: &Path, path_str: &str, last_modified: PrimitiveDateTime, pool: &PgPool, art_dir: &str) -> Result<TrackInfo, BoxError> {
     // get tag
     let tag_optional = metaflac::Tag::read_from_path(path).ok();
     
@@ -121,13 +128,13 @@ fn parse_flac(path: &Path, path_str: &str, last_modified: PrimitiveDateTime) -> 
 
                 // get pictures
                 // exact same interface as id3 apparently for pictures
-                let mut picture = None;
+                let mut art_id = None;
                 let mut pictures_iter = tag.pictures();
                 loop {
                     if let Some(picture_curr) = pictures_iter.next() {
                         if picture_curr.picture_type == metaflac::block::PictureType::CoverFront {
                             // if cover front we can stop
-                            picture = Some(picture_curr.data.clone());
+                            art_id = Some(get_art_id(&picture_curr.data, pool, art_dir).await?);
                             break;
                         }
                     } else {
@@ -145,7 +152,7 @@ fn parse_flac(path: &Path, path_str: &str, last_modified: PrimitiveDateTime) -> 
                             track_number: comment.track().unwrap_or(0),
                             disc_number: comment.comments.get("DISCNUMBER").unwrap_or(&Vec::new()).get(0).unwrap_or(&"0".to_string()).to_string().parse::<u32>().unwrap_or(0),
                             length_seconds: track_length,
-                            art: picture,
+                            art_id: art_id,
                             path_str: path_str.to_string(),
                             last_modified: last_modified,
                         }
@@ -159,7 +166,7 @@ fn parse_flac(path: &Path, path_str: &str, last_modified: PrimitiveDateTime) -> 
                             track_number: 0,
                             disc_number: 0,
                             length_seconds: track_length,
-                            art: picture,
+                            art_id: art_id,
                             path_str: path_str.to_string(),
                             last_modified: last_modified,
                         }   
@@ -175,11 +182,49 @@ fn parse_flac(path: &Path, path_str: &str, last_modified: PrimitiveDateTime) -> 
                     track_number: 0,
                     disc_number: 0,
                     length_seconds: 0,
-                    art: None,
+                    art_id: None,
                     path_str: path_str.to_string(),
                     last_modified: last_modified,
                 }
             }
         }
     )
+}
+
+// check if picture's already in the database
+// insert new art if there isn't one
+async fn get_art_id(picture_data: &[u8], pool: &PgPool, art_dir: &str) -> Result<i32, BoxError> {
+    let art_id: i32;
+
+    // calculate hash
+    let art_hash = blake3::hash(picture_data);
+    let art_hash_bytes = art_hash.as_bytes().to_vec();
+
+    // check if hash in database
+    let existing_art_id = sqlx::query_scalar!("SELECT art_id FROM art \
+        WHERE hash = ($1)",
+        art_hash_bytes)
+        .fetch_optional(pool)
+        .await?;
+
+    if existing_art_id.is_some() {
+        // if already in database use that one instead
+        art_id = existing_art_id.unwrap(); // guarantee to not be none
+    } else {
+        // else insert new art
+        // write to directory
+        let new_art_name = art_hash.to_hex().to_string();
+        let new_art_directory = format!("{0}/{1}", art_dir, new_art_name);
+        let mut file = File::create(&new_art_directory)
+            .context(format!("Creation of {} error. Maybe the arts directory in config.json does not exist?", &new_art_directory))?;
+        file.write_all(picture_data)?;
+
+        // insert to db
+        art_id = sqlx::query_scalar!("INSERT INTO art (hash, path) VALUES ($1, $2) RETURNING art_id",
+            art_hash_bytes, &new_art_directory)
+            .fetch_one(pool)
+            .await?;
+    };
+
+    Ok(art_id)
 }

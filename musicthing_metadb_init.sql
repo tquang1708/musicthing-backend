@@ -347,6 +347,27 @@ ALTER TABLE ONLY public.track_art
 
 
 --
+-- Name: album_album_name_index; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX album_album_name_index ON public.album USING btree (album_name);
+
+
+--
+-- Name: artist_album_album_id_index; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX artist_album_album_id_index ON public.artist_album USING btree (album_id);
+
+
+--
+-- Name: artist_album_artist_id_index; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX artist_album_artist_id_index ON public.artist_album USING btree (artist_id);
+
+
+--
 -- Name: album_art album_art_album_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 

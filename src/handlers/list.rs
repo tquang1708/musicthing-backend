@@ -12,7 +12,6 @@ use crate::{
         internal_error,
         SharedState, Config,
         ListRoot, ListAlbum, ListDisc, ListTrack},
-    handlers::{DBAlbum},
 };
 
 // if list_cache is outdated based on state, calculate new list_cache and update state
@@ -35,7 +34,7 @@ pub async fn list_handler(
 
     // if function did not early return in previous step this means list cache is outdated
     // update state with new list cache
-    let new_list_cache = generate_root(config, pool.clone()).await.map_err(internal_error)?;
+    let new_list_cache = generate_root(config, &pool).await.map_err(internal_error)?;
     state.write().await.list_cache = new_list_cache.clone();
 
     // change list_cache_outdated to false to indicate list_cache has been updated
@@ -45,12 +44,18 @@ pub async fn list_handler(
     Ok(Json(new_list_cache))
 }
 
-async fn generate_root(config: Config, pool: PgPool) -> Result<Option<ListRoot>, BoxError> {
+async fn generate_root(config: Config, pool: &PgPool) -> Result<Option<ListRoot>, BoxError> {
+    // struct for interfacing with the db
+    struct DBAlbum {
+        album_id: i32,
+        album_name: Option<String>,
+    }
+
     // gather all albums with tracks sorted alphabetically
     let albums = sqlx::query_as!(DBAlbum, "SELECT DISTINCT album.album_id, album_name FROM album \
         JOIN album_track ON (album.album_id = album_track.album_id)
         ORDER BY (album_name)")
-        .fetch_all(&pool)
+        .fetch_all(pool)
         .await?;
     
     // iterate over albums to generate discs and tracks if there's anything in albums
@@ -60,7 +65,7 @@ async fn generate_root(config: Config, pool: PgPool) -> Result<Option<ListRoot>,
             // gather all discs
             let discs = sqlx::query_scalar!("SELECT DISTINCT disc_no FROM album_track WHERE album_id = ($1) ORDER BY (disc_no)",
                 album.album_id)
-                .fetch_all(&pool)
+                .fetch_all(pool)
                 .await?;
 
             // construct disc_structs
@@ -74,7 +79,7 @@ async fn generate_root(config: Config, pool: PgPool) -> Result<Option<ListRoot>,
                     WHERE album_id = ($1) AND disc_no = ($2) \
                     ORDER BY (track_no)",
                     album.album_id, *disc)
-                    .fetch_all(&pool)
+                    .fetch_all(pool)
                     .await?;
 
                 let track_structs = tracks.iter().map(|track| ListTrack {
@@ -101,7 +106,7 @@ async fn generate_root(config: Config, pool: PgPool) -> Result<Option<ListRoot>,
                 JOIN artist_album ON (album.album_id = artist_album.album_id) \
                 JOIN artist ON (artist.artist_id = artist_album.artist_id) \
                 WHERE album.album_id = ($1)", album.album_id)
-                .fetch_one(&pool)
+                .fetch_one(pool)
                 .await?;
 
             // get album art path
@@ -109,7 +114,7 @@ async fn generate_root(config: Config, pool: PgPool) -> Result<Option<ListRoot>,
                 JOIN album_art ON (album_art.art_id = art.art_id) \
                 JOIN album ON (album.album_id = album_art.album_id) \
                 WHERE album.album_id = ($1)", album.album_id)
-                .fetch_optional(&pool)
+                .fetch_optional(pool)
                 .await?;
             
             let album_art_path_actual;

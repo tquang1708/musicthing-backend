@@ -3,3 +3,6 @@
 /art
 config.json
 log.txt
+
+flamegraph.svg
+perf.data*

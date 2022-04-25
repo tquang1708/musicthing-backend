@@ -34,7 +34,7 @@ mod handlers;
 mod utils;
 
 use crate::{
-    handlers::{demo, reload, list, play},
+    handlers::{reload, list},
     utils::{SharedState, parse_cfg, find_file},
 };
 
@@ -62,12 +62,9 @@ async fn main() -> Result<(), BoxError> {
 
     // app routing
     let app = Router::new()
-        .route("/api/test", get(demo::basic_handler))
-        .route("/api/db", get(demo::connection_pool_extractor_handler))
         .route("/api/reload", get(reload::reload_handler))
         .route("/api/hard_reload", get(reload::hard_reload_handler))
         .route("/api/list", get(list::list_handler))
-        .route("/api/play", get(play::play_handler))
         .layer(Extension(pool))
         .layer(Extension(config.clone()))
         .layer(Extension(SharedState::default()))
