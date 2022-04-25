@@ -158,10 +158,10 @@ async fn add_track_from_path(pool: PgPool, path_str: &str, art_dir: &str) -> Res
 // given all track's information, add the track to the db
 async fn add_track_from_info(pool: PgPool, track_info: TrackInfo, art_dir: &str) -> Result<(), BoxError> {
     // trim null characters from texts
-    let clean_track_name = track_info.track_name.trim_matches(char::from(0));
-    let clean_artist_name_temp = track_info.artist_name.trim_matches(char::from(0));
-    let clean_album_artist_name_temp = track_info.album_artist_name.trim_matches(char::from(0));
-    let clean_album_name = track_info.album_name.trim_matches(char::from(0));
+    let clean_track_name = &(track_info.track_name.trim_matches(char::from(0)).replace(char::from(0), " "));
+    let clean_artist_name_temp = &(track_info.artist_name.trim_matches(char::from(0)).replace(char::from(0), " "));
+    let clean_album_artist_name_temp = &(track_info.album_artist_name.trim_matches(char::from(0)).replace(char::from(0), " "));
+    let clean_album_name = &(track_info.album_name.trim_matches(char::from(0)).replace(char::from(0), " "));
 
     // in the case either artist_name or album_artist_name is empty, go with the other one
     let clean_artist_name;

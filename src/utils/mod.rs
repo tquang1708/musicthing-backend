@@ -148,7 +148,7 @@ pub struct ListTrack {
 
 // Utility function for mapping errors into 500 http response
 pub fn internal_error(err: BoxError) -> (StatusCode, String) {
-    (StatusCode::INTERNAL_SERVER_ERROR, format!("Internal error: {}", err.to_string()))
+    (StatusCode::INTERNAL_SERVER_ERROR, format!("Internal error: {:?}", err))
 }
 
 // // slightly different function rwlock poison error
