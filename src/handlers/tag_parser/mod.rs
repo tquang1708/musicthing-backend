@@ -73,28 +73,30 @@ async fn parse_mp3(
     // get length
     let track_length = mp3_duration::from_path(path_full).unwrap_or(Duration::new(0, 0)).as_secs();
 
-    // get image file in parent dir
-    let picture = get_picture_in_dir(path_full)?;
-
     Ok(
         match tag_optional {
             Some(tag) => {
                 // get picture
                 let mut art_id = None;
-                if let Some(picture_dir) = picture {
-                    art_id = Some(get_art_id(&read(picture_dir)?, pool, art_dir).await?);
-                } else {
-                    let mut pictures_iter = tag.pictures();
-                    loop {
-                        if let Some(picture_curr) = pictures_iter.next() {
-                            if picture_curr.picture_type == id3::frame::PictureType::CoverFront {
-                                // if cover front we can stop
-                                art_id = Some(get_art_id(&picture_curr.data, pool, art_dir).await?);
-                                break;
-                            }
-                        } else {
+                let mut pictures_iter = tag.pictures();
+                loop {
+                    if let Some(picture_curr) = pictures_iter.next() {
+                        if picture_curr.picture_type == id3::frame::PictureType::CoverFront {
+                            // if cover front we can stop
+                            art_id = Some(get_art_id(&picture_curr.data, pool, art_dir).await?);
                             break;
                         }
+                    } else {
+                        break;
+                    }
+                };
+
+                // in case the track has no embedded cover find it in dir
+                if art_id.is_none() {
+                    // get image file in parent dir
+                    let picture = get_picture_in_dir(path_full)?;
+                    if let Some(picture_dir) = picture {
+                        art_id = Some(get_art_id(&read(picture_dir)?, pool, art_dir).await?);
                     };
                 };
 
@@ -136,9 +138,6 @@ async fn parse_flac(
     last_modified: PrimitiveDateTime,
     art_dir: &str
 ) -> Result<TrackInfo, BoxError> {
-    // get image file in parent dir
-    let picture = get_picture_in_dir(path_full)?;
-
     // get tag
     let tag_optional = metaflac::Tag::read_from_path(path_full).ok();
     
@@ -153,23 +152,28 @@ async fn parse_flac(
                     track_length = 0;
                 };
 
-                // get pictures
+                // get picture
                 // exact same interface as id3 apparently for pictures
                 let mut art_id = None;
-                if let Some(picture_dir) = picture {
-                    art_id = Some(get_art_id(&read(picture_dir)?, pool, art_dir).await?);
-                } else {
-                    let mut pictures_iter = tag.pictures();
-                    loop {
-                        if let Some(picture_curr) = pictures_iter.next() {
-                            if picture_curr.picture_type == metaflac::block::PictureType::CoverFront {
-                                // if cover front we can stop
-                                art_id = Some(get_art_id(&picture_curr.data, pool, art_dir).await?);
-                                break;
-                            }
-                        } else {
+                let mut pictures_iter = tag.pictures();
+                loop {
+                    if let Some(picture_curr) = pictures_iter.next() {
+                        if picture_curr.picture_type == metaflac::block::PictureType::CoverFront {
+                            // if cover front we can stop
+                            art_id = Some(get_art_id(&picture_curr.data, pool, art_dir).await?);
                             break;
                         }
+                    } else {
+                        break;
+                    }
+                };
+
+                // in case the track has no embedded cover find it in dir
+                if art_id.is_none() {
+                    // get image file in parent dir
+                    let picture = get_picture_in_dir(path_full)?;
+                    if let Some(picture_dir) = picture {
+                        art_id = Some(get_art_id(&read(picture_dir)?, pool, art_dir).await?);
                     };
                 };
 
