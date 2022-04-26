@@ -40,16 +40,16 @@ pub async fn list_albums_handler(
 
 async fn list_albums(pool: &PgPool) -> Result<Option<Vec<ListAlbum>>, BoxError> {
     // query all relevant information
-    let albums = sqlx::query_as!(ListAlbum, "SELECT DISTINCT 
+    let albums = sqlx::query_as!(ListAlbum, r#"SELECT DISTINCT
         album.album_id as id, 
         album_name as name, 
         artist_name, 
-        path as art_path FROM album \
-        JOIN artist_album ON (album.album_id = artist_album.album_id) \
-        JOIN artist ON (artist.artist_id = artist_album.artist_id) \
-        JOIN album_art ON (album_art.album_id = album.album_id) \
-        JOIN art ON (album_art.art_id = art.art_id)
-        ORDER BY (album_name)")
+        path as "art_path?" FROM album
+        JOIN artist_album ON (album.album_id = artist_album.album_id)
+        JOIN artist ON (artist.artist_id = artist_album.artist_id)
+        LEFT OUTER JOIN album_art ON (album_art.album_id = album.album_id)
+        LEFT OUTER JOIN art ON (album_art.art_id = art.art_id)
+        ORDER BY (album_name)"#)
         .fetch_all(pool)
         .await?;
 
@@ -92,7 +92,7 @@ async fn list_album_id(pool: &PgPool, id: &str) -> Result<Option<ListAlbumID>, B
         id: i32,
         name: String,
         album_artist_name: String,
-        art_path: String,
+        art_path: Option<String>,
     }
 
     // return early if parsing fails
@@ -103,16 +103,16 @@ async fn list_album_id(pool: &PgPool, id: &str) -> Result<Option<ListAlbumID>, B
     let id_int = id_parse.unwrap();
 
     // get our album
-    let album = sqlx::query_as!(DBAlbum, "SELECT DISTINCT 
+    let album = sqlx::query_as!(DBAlbum, r#"SELECT DISTINCT 
         album.album_id as id, 
         album_name as name, 
         artist_name as album_artist_name, 
-        path as art_path FROM album \
-        JOIN artist_album ON (album.album_id = artist_album.album_id) \
-        JOIN artist ON (artist.artist_id = artist_album.artist_id) \
-        JOIN album_art ON (album_art.album_id = album.album_id) \
-        JOIN art ON (album_art.art_id = art.art_id)
-        WHERE album.album_id = ($1)", id_int)
+        path as "art_path?" FROM album
+        JOIN artist_album ON (album.album_id = artist_album.album_id)
+        JOIN artist ON (artist.artist_id = artist_album.artist_id)
+        LEFT OUTER JOIN album_art ON (album_art.album_id = album.album_id)
+        LEFT OUTER JOIN art ON (album_art.art_id = art.art_id)
+        WHERE album.album_id = ($1)"#, id_int)
         .fetch_optional(pool)
         .await?;
 

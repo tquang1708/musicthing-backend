@@ -134,7 +134,7 @@ pub struct ListAlbum {
     pub id: i32,
     pub name: String,
     pub artist_name: String,
-    pub art_path: String,
+    pub art_path: Option<String>,
 }
 
 // list json storing struct for indiv album query
@@ -143,7 +143,7 @@ pub struct ListAlbumID {
     pub id: i32,
     pub name: String,
     pub album_artist_name: String,
-    pub art_path: String,
+    pub art_path: Option<String>,
     pub discs: Vec<ListDisc>
 }
 
