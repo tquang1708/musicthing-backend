@@ -159,6 +159,7 @@ pub struct ListTrack {
     pub artist: String,
     pub name: String,
     pub path: String,
+    pub art_path: Option<String>,
     pub length_seconds: i32,
 }
 

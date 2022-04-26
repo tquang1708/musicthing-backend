@@ -128,12 +128,14 @@ async fn list_album_id(pool: &PgPool, id: &str) -> Result<Option<ListAlbumID>, B
         let mut disc_structs: Vec<ListDisc> = Vec::new();
         for disc in discs {
             // gather all tracks on disc
-            let tracks = sqlx::query!("SELECT track_no, artist_name, track_name, path, length_seconds FROM track \
-                JOIN artist_track ON (track.track_id = artist_track.track_id) \
-                JOIN artist ON (artist_track.artist_id = artist.artist_id) \
-                JOIN album_track ON (track.track_id = album_track.track_id) \
-                WHERE album_id = ($1) AND disc_no = ($2) \
-                ORDER BY (track_no)",
+            let tracks = sqlx::query!(r#"SELECT track_no, artist_name, track_name, track.path as path, art.path as "art_path?", length_seconds FROM track
+                JOIN artist_track ON (track.track_id = artist_track.track_id)
+                JOIN artist ON (artist_track.artist_id = artist.artist_id)
+                JOIN album_track ON (track.track_id = album_track.track_id)
+                LEFT OUTER JOIN track_art ON (track_art.track_id = track.track_id)
+                LEFT OUTER JOIN art ON (track_art.art_id = art.art_id)
+                WHERE album_id = ($1) AND disc_no = ($2)
+                ORDER BY (track_no)"#,
                 id_int, disc)
                 .fetch_all(pool)
                 .await?;
@@ -143,6 +145,7 @@ async fn list_album_id(pool: &PgPool, id: &str) -> Result<Option<ListAlbumID>, B
                     artist: track.artist_name.clone(),
                     name: track.track_name.clone(),
                     path: track.path.clone(),
+                    art_path: track.art_path.clone(),
                     length_seconds: track.length_seconds,
                 }).collect();
 
