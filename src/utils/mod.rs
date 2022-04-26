@@ -4,6 +4,7 @@ use std::{
     path::PathBuf,
     fs::File,
     io::BufReader,
+    collections::HashMap,
 };
 use axum::http::StatusCode;
 use tokio::sync::RwLock;
@@ -101,38 +102,49 @@ pub fn find_file(filename: &str) -> Result<Option<PathBuf>, BoxError> {
 }
 
 // state struct with tokio's rwlock
-pub type SharedState = Arc<RwLock<State>>;
+pub type SharedCache = Arc<RwLock<Cache>>;
 
 #[derive(Debug)]
-pub struct State {
-    pub list_cache_outdated: bool,
-    pub list_cache: Option<ListRoot>,
-    pub list_album_cache_outdated: bool,
-    pub list_album_cache: Option<Vec<ListAlbum>>,
+pub struct Cache {
+    pub album_cache: AlbumCache,
+    pub album_id_cache: HashMap<String, ListAlbumID>,
 }
-impl Default for State {
-    fn default() -> State {
-        return State {
-            list_cache_outdated: true,
-            list_cache: None,
-            list_album_cache_outdated: true,
-            list_album_cache: None,
+impl Default for Cache {
+    fn default() -> Cache {
+        return Cache {
+            album_cache: AlbumCache {
+                list_album_cache_outdated: true,
+                list_album_cache: None,
+            },
+            album_id_cache: HashMap::new(),
         };
     }
 }
 
-// list json storage struct
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct ListRoot {
-    pub albums: Vec<ListAlbumDeprecating>,
+// could be none when there's no album
+#[derive(Debug)]
+pub struct AlbumCache {
+    pub list_album_cache_outdated: bool,
+    pub list_album_cache: Option<Vec<ListAlbum>>,
 }
 
+// list json storing struct for albums query
 #[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct ListAlbumDeprecating {
+pub struct ListAlbum {
+    pub id: i32,
+    pub name: String,
+    pub artist_name: String,
+    pub art_path: String,
+}
+
+// list json storing struct for indiv album query
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct ListAlbumID {
+    pub id: i32,
     pub name: String,
     pub album_artist_name: String,
-    pub album_art_path: String,
-    pub discs: Vec<ListDisc>,
+    pub art_path: String,
+    pub discs: Vec<ListDisc>
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -148,15 +160,6 @@ pub struct ListTrack {
     pub name: String,
     pub path: String,
     pub length_seconds: i32,
-}
-
-// list json storing struct for albums query
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct ListAlbum {
-    pub id: i32,
-    pub name: String,
-    pub artist_name: String,
-    pub art_path: String,
 }
 
 // Utility function for mapping errors into 500 http response

@@ -1,4 +1,7 @@
-use std::path::Path;
+use std::{
+    path::Path,
+    collections::HashMap
+};
 use axum::{
     http::StatusCode,
     extract::{Extension}
@@ -11,7 +14,7 @@ use sqlx::{
 use walkdir::WalkDir;
 
 use crate::{
-    utils::{SharedState, Config, internal_error},
+    utils::{SharedCache, AlbumCache, Config, internal_error},
     handlers::{
         RECOGNIZED_EXTENSIONS, 
         tag_parser::{TrackInfo, parse_tag}
@@ -22,14 +25,17 @@ use crate::{
 pub async fn reload_handler(
     Extension(pool): Extension<PgPool>,
     Extension(config): Extension<Config>,
-    Extension(state): Extension<SharedState>
+    Extension(cache): Extension<SharedCache>
 ) -> Result<(), (StatusCode, String)> {
     // load data
     load_db(&pool, &config).await.map_err(internal_error)?;
 
-    // update shared state to mark that the list cache is outdated
-    state.write().await.list_cache_outdated = true;
-    state.write().await.list_album_cache_outdated = true;
+    // recreate cache
+    cache.write().await.album_cache = AlbumCache {
+        list_album_cache_outdated: true,
+        list_album_cache: None,
+    };
+    cache.write().await.album_id_cache = HashMap::new();
 
     Ok(())
 }
@@ -38,7 +44,7 @@ pub async fn reload_handler(
 pub async fn hard_reload_handler(
     Extension(pool): Extension<PgPool>,
     Extension(config): Extension<Config>,
-    Extension(state): Extension<SharedState>
+    Extension(cache): Extension<SharedCache>
 ) -> Result<(), (StatusCode, String)> {
     // clear data
     clear_data(&pool).await.map_err(internal_error)?;
@@ -46,9 +52,12 @@ pub async fn hard_reload_handler(
     // load data
     load_db(&pool, &config).await.map_err(internal_error)?;
 
-    // update shared state to mark that the list cache is outdated
-    state.write().await.list_cache_outdated = true;
-    state.write().await.list_album_cache_outdated = true;
+    // recreate cache
+    cache.write().await.album_cache = AlbumCache {
+        list_album_cache_outdated: true,
+        list_album_cache: None,
+    };
+    cache.write().await.album_id_cache = HashMap::new();
 
     Ok(())
 }
