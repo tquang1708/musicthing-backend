@@ -14,7 +14,7 @@ use sqlx::{
 use walkdir::WalkDir;
 
 use crate::{
-    utils::{SharedCache, AlbumCache, Config, internal_error},
+    utils::{SharedState, AlbumCache, Config},
     handlers::{
         RECOGNIZED_EXTENSIONS, 
         tag_parser::{TrackInfo, parse_tag}
@@ -25,17 +25,35 @@ use crate::{
 pub async fn reload_handler(
     Extension(pool): Extension<PgPool>,
     Extension(config): Extension<Config>,
-    Extension(cache): Extension<SharedCache>
+    Extension(state): Extension<SharedState>
 ) -> Result<(), (StatusCode, String)> {
-    // load data
-    load_db(&pool, &config).await.map_err(internal_error)?;
+    // start reload only if one isn't already running
+    {
+        let state_read = state.read().await;
 
-    // recreate cache
-    cache.write().await.album_cache = AlbumCache {
+        if state_read.reload_running {
+            return Err((StatusCode::SERVICE_UNAVAILABLE, "A Reload task is already running".to_string()));
+        }
+    }
+
+    // update state to say a reload is running
+    state.write().await.reload_running = true;
+
+    // if function did not early return start reloading in separate thread
+    let state_clone = state.clone();
+    tokio::spawn(async move {
+            load_db(pool.clone(), config.clone(), state_clone.clone()).await.expect("Panicked on load_db in reload");
+            // update state to say reload finished
+            state_clone.write().await.reload_running = false;
+        }
+    );
+
+    // outdate the cache
+    state.write().await.album_cache = AlbumCache {
         list_album_cache_outdated: true,
         list_album_cache: None,
     };
-    cache.write().await.album_id_cache = HashMap::new();
+    state.write().await.album_id_cache = HashMap::new();
 
     Ok(())
 }
@@ -44,26 +62,44 @@ pub async fn reload_handler(
 pub async fn hard_reload_handler(
     Extension(pool): Extension<PgPool>,
     Extension(config): Extension<Config>,
-    Extension(cache): Extension<SharedCache>
+    Extension(state): Extension<SharedState>
 ) -> Result<(), (StatusCode, String)> {
-    // clear data
-    clear_data(&pool).await.map_err(internal_error)?;
+    // start reload only if one isn't already running
+    {
+        let state_read = state.read().await;
 
-    // load data
-    load_db(&pool, &config).await.map_err(internal_error)?;
+        if state_read.reload_running {
+            return Err((StatusCode::SERVICE_UNAVAILABLE, "A Reload task is already running".to_string()));
+        }
+    }
+
+    // update state to say a reload is running
+    state.write().await.reload_running = true;
+
+    // if function did not early return start reloading in separate thread
+    let state_clone = state.clone();
+    tokio::spawn(async move {
+            // silently ignore error here for now
+            clear_data(pool.clone(), state_clone.clone()).await.expect("Panicked on clear_data in hard_reload");
+            load_db(pool.clone(), config.clone(), state_clone.clone()).await.expect("Panicked on load_data in hard_reload");
+
+            // update state to say reload finished
+            state_clone.write().await.reload_running = false;
+        }
+    );
 
     // recreate cache
-    cache.write().await.album_cache = AlbumCache {
+    state.write().await.album_cache = AlbumCache {
         list_album_cache_outdated: true,
         list_album_cache: None,
     };
-    cache.write().await.album_id_cache = HashMap::new();
+    state.write().await.album_id_cache = HashMap::new();
 
     Ok(())
 }
 
 // wipe the database
-async fn clear_data(pool: &PgPool) -> Result<(), BoxError> {
+async fn clear_data(pool: PgPool, state: SharedState) -> Result<(), BoxError> {
     // tables to clear from
     let tables = [
         "album_track",
@@ -77,22 +113,37 @@ async fn clear_data(pool: &PgPool) -> Result<(), BoxError> {
     // iterate over tables then delete from them
     for table in tables.iter() {
         sqlx::query(format!("DELETE FROM {}", table).as_str())
-            .execute(pool)
+            .execute(&pool)
             .await?;
     };
+
+    // recreate cache
+    state.write().await.album_cache = AlbumCache {
+        list_album_cache_outdated: true,
+        list_album_cache: None,
+    };
+    state.write().await.album_id_cache = HashMap::new();
 
     Ok(())
 }
 
 // load database metadata from path
-async fn load_db(pool: &PgPool, config: &Config) -> Result<(), BoxError> {    
-    update_old_metadata(pool, config).await?;
-    load_new_metadata(pool, config).await?;
+async fn load_db(pool: PgPool, config: Config, state: SharedState) -> Result<(), BoxError> {    
+    update_old_metadata(&pool, &config, &state).await?;
+    load_new_metadata(&pool, &config, &state).await?;
+
+    // recreate cache
+    state.write().await.album_cache = AlbumCache {
+        list_album_cache_outdated: true,
+        list_album_cache: None,
+    };
+    state.write().await.album_id_cache = HashMap::new();
+
     Ok(())
 }
 
 // update old metadata from files that have been changed, or files that have been deleted
-async fn update_old_metadata(pool: &PgPool, config: &Config) -> Result<(), BoxError> {
+async fn update_old_metadata(pool: &PgPool, config: &Config, state: &SharedState) -> Result<(), BoxError> {
     // struct for interfacing with the database
     struct DBTrack {
         track_id: i32,
@@ -121,17 +172,24 @@ async fn update_old_metadata(pool: &PgPool, config: &Config) -> Result<(), BoxEr
             if last_modified < new_modified {
                 // update metadata if track's modified time is later
                 delete_track(pool, track_id).await?;
-                add_track_from_path(pool, config, path).await?;
+                add_track_from_path(pool, config, state, path).await?;
             }
         }
     };
+
+    // recreate cache
+    state.write().await.album_cache = AlbumCache {
+        list_album_cache_outdated: true,
+        list_album_cache: None,
+    };
+    state.write().await.album_id_cache = HashMap::new();
 
     Ok(())
 }
 
 // load new metadata from given music directory path
 // basically recursively going down the directory then calling add_track_from_path on audio files
-async fn load_new_metadata(pool: &PgPool, config: &Config) -> Result<(), BoxError> {
+async fn load_new_metadata(pool: &PgPool, config: &Config, state: &SharedState) -> Result<(), BoxError> {
     // silently discards of errors
     for dir in WalkDir::new(&config.music_directory).follow_links(true).into_iter().filter_map(|e| e.ok()) {
         // only care if it has an extension
@@ -140,19 +198,26 @@ async fn load_new_metadata(pool: &PgPool, config: &Config) -> Result<(), BoxErro
             // if extension is recognized we add the music track
             if RECOGNIZED_EXTENSIONS.iter().any(|i| i == &ext) {
                 add_track_from_path(
-                    pool, config,
+                    pool, config, state,
                     dir.path().strip_prefix(&config.music_directory)?,
                 ).await?;
             };
         };
     };
 
+    // recreate cache
+    state.write().await.album_cache = AlbumCache {
+        list_album_cache_outdated: true,
+        list_album_cache: None,
+    };
+    state.write().await.album_id_cache = HashMap::new();
+
     Ok(())
 }
 
 // given a path to a track, add the track's metadata to the database
 // if path's track already in the database, it's assumed the track is correct, so we skip it
-async fn add_track_from_path(pool: &PgPool, config: &Config, path: &Path) -> Result<(), BoxError> {
+async fn add_track_from_path(pool: &PgPool, config: &Config, state: &SharedState, path: &Path) -> Result<(), BoxError> {
     // check if track is already in database
     // procesing 
     let already_exists = sqlx::query_scalar!("SELECT (track_id) FROM track WHERE path = ($1)",
@@ -165,6 +230,13 @@ async fn add_track_from_path(pool: &PgPool, config: &Config, path: &Path) -> Res
 
     // parse track's tag then add based on info
     add_track_from_info(pool, parse_tag(pool, config, path).await?).await?;
+
+    // recreate cache
+    state.write().await.album_cache = AlbumCache {
+        list_album_cache_outdated: true,
+        list_album_cache: None,
+    };
+    state.write().await.album_id_cache = HashMap::new();
     Ok(())
 }
 

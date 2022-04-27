@@ -35,7 +35,7 @@ mod utils;
 
 use crate::{
     handlers::{reload, list},
-    utils::{SharedCache, parse_cfg, find_file},
+    utils::{SharedState, parse_cfg, find_file},
 };
 
 #[tokio::main]
@@ -68,7 +68,7 @@ async fn main() -> Result<(), BoxError> {
         .route("/api/list/album/:id", get(list::list_album_id_handler))
         .layer(Extension(pool))
         .layer(Extension(config.clone()))
-        .layer(Extension(SharedCache::default()))
+        .layer(Extension(SharedState::default()))
         .nest(
             "/track",
             get_service(ServeDir::new(config.music_directory))

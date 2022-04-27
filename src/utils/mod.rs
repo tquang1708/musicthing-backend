@@ -102,16 +102,18 @@ pub fn find_file(filename: &str) -> Result<Option<PathBuf>, BoxError> {
 }
 
 // state struct with tokio's rwlock
-pub type SharedCache = Arc<RwLock<Cache>>;
+pub type SharedState = Arc<RwLock<State>>;
 
 #[derive(Debug)]
-pub struct Cache {
+pub struct State {
+    pub reload_running: bool,
     pub album_cache: AlbumCache,
     pub album_id_cache: HashMap<String, ListAlbumID>,
 }
-impl Default for Cache {
-    fn default() -> Cache {
-        return Cache {
+impl Default for State {
+    fn default() -> State {
+        return State {
+            reload_running: false,
             album_cache: AlbumCache {
                 list_album_cache_outdated: true,
                 list_album_cache: None,

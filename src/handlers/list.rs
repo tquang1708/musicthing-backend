@@ -9,17 +9,17 @@ use std::collections::HashMap;
 use crate::{
     utils::{
         internal_error,
-        SharedCache, AlbumCache,
+        SharedState, AlbumCache,
         ListAlbum, ListAlbumID, ListDisc, ListTrack,
     },
 };
 
 pub async fn list_albums_handler(
     Extension(pool): Extension<PgPool>,
-    Extension(cache): Extension<SharedCache>,
+    Extension(state): Extension<SharedState>,
 ) -> Result<Json<Option<Vec<ListAlbum>>>, (StatusCode, String)> {
     {
-        let cache_read = cache.read().await;
+        let cache_read = state.read().await;
 
         if !cache_read.album_cache.list_album_cache_outdated {
             return Ok(Json(cache_read.album_cache.list_album_cache.clone())); // only cloning the list_album_cache
@@ -29,7 +29,7 @@ pub async fn list_albums_handler(
     // if function did not early return in previous step this means list cache is outdated
     // update state with new list cache
     let new_list_album_cache = list_albums(&pool).await.map_err(internal_error)?;
-    cache.write().await.album_cache = AlbumCache {
+    state.write().await.album_cache = AlbumCache {
         list_album_cache_outdated: false,
         list_album_cache: new_list_album_cache.clone(),
     };
@@ -59,7 +59,7 @@ async fn list_albums(pool: &PgPool) -> Result<Option<Vec<ListAlbum>>, BoxError> 
 
 pub async fn list_album_id_handler(
     Extension(pool): Extension<PgPool>,
-    Extension(cache): Extension<SharedCache>,
+    Extension(state): Extension<SharedState>,
     Path(params): Path<HashMap<String, String>>,
 ) -> Result<Json<Option<ListAlbumID>>, (StatusCode, String)> {
     // obtain requested album_id
@@ -67,7 +67,7 @@ pub async fn list_album_id_handler(
 
     // check if cache exists
     {
-        let cache_read = cache.read().await;
+        let cache_read = state.read().await;
 
         if let Some(album_id_cache) = cache_read.album_id_cache.get(id) {
             return Ok(Json(Some(album_id_cache.clone())));
@@ -77,7 +77,7 @@ pub async fn list_album_id_handler(
     // otherwise write new cache
     let new_list_album_id_cache = list_album_id(&pool, &id).await.map_err(internal_error)?;
     if let Some(ref actual_album_id_cache) = new_list_album_id_cache {
-        cache.write().await.album_id_cache.insert(id.to_string(), actual_album_id_cache.clone());
+        state.write().await.album_id_cache.insert(id.to_string(), actual_album_id_cache.clone());
     };
 
     // return the appropriate json
