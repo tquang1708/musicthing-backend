@@ -70,7 +70,7 @@ async fn main() -> Result<(), BoxError> {
         .layer(Extension(config.clone()))
         .layer(Extension(SharedState::default()))
         .nest(
-            "/track",
+            "/api/track",
             get_service(ServeDir::new(config.music_directory))
             .handle_error(|e: std::io::Error| async move {(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -78,7 +78,7 @@ async fn main() -> Result<(), BoxError> {
             )}),
         )
         .nest(
-            "/art",
+            "/api/art",
             get_service(ServeDir::new(config.art_directory))
             .handle_error(|e: std::io::Error| async move {(
                 StatusCode::INTERNAL_SERVER_ERROR,
