@@ -128,7 +128,7 @@ async fn list_album_id(pool: &PgPool, id: &str) -> Result<Option<ListAlbumID>, B
         let mut disc_structs: Vec<ListDisc> = Vec::new();
         for disc in discs {
             // gather all tracks on disc
-            let tracks = sqlx::query!(r#"SELECT track_no, artist_name, track_name, track.path as path, art.path as "art_path?", length_seconds FROM track
+            let tracks = sqlx::query!(r#"SELECT track.track_id as track_id, track_no, artist_name, track_name, track.path as path, art.path as "art_path?", length_seconds FROM track
                 JOIN artist_track ON (track.track_id = artist_track.track_id)
                 JOIN artist ON (artist_track.artist_id = artist.artist_id)
                 JOIN album_track ON (track.track_id = album_track.track_id)
@@ -141,6 +141,7 @@ async fn list_album_id(pool: &PgPool, id: &str) -> Result<Option<ListAlbumID>, B
                 .await?;
 
             let track_structs = tracks.iter().map(|track| ListTrack {
+                    id: track.track_id,
                     number: track.track_no.unwrap_or(0),
                     artist: track.artist_name.clone(),
                     name: track.track_name.clone(),

@@ -163,6 +163,7 @@ pub struct ListDisc {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ListTrack {
+    pub id: i32,
     pub number: i32,
     pub artist: String,
     pub name: String,
