@@ -21,8 +21,8 @@ pub struct Config {
     pub frontend_url: String,
     pub backend_socket_addr: String,
     pub use_tls: bool,
-    pub ssl_certificate_dir: String,
-    pub ssl_certificate_key_dir: String,
+    pub ssl_certificate: String,
+    pub ssl_certificate_key: String,
     pub max_db_connections: u32,
     pub db_connection_timeout_seconds: u64,
     pub concurrency_limit: usize,
@@ -41,8 +41,8 @@ pub fn parse_cfg() -> Result<Config, BoxError> {
             config = serde_json::from_reader(BufReader::new(File::open(path)?))?;
 
             // expand directories
-            config.ssl_certificate_dir = shellexpand::full(&config.ssl_certificate_dir)?.to_string();
-            config.ssl_certificate_key_dir = shellexpand::full(&config.ssl_certificate_key_dir)?.to_string();
+            config.ssl_certificate = shellexpand::full(&config.ssl_certificate)?.to_string();
+            config.ssl_certificate_key = shellexpand::full(&config.ssl_certificate_key)?.to_string();
             config.music_directory = shellexpand::full(&config.music_directory)?.to_string();
             config.art_directory = shellexpand::full(&config.art_directory)?.to_string();
         },
@@ -53,8 +53,8 @@ pub fn parse_cfg() -> Result<Config, BoxError> {
                 frontend_url: "http://0.0.0.0:3000".to_string(),
                 backend_socket_addr: "0.0.0.0:8000".to_string(),
                 use_tls: true,
-                ssl_certificate_dir: "./self-signed-certs/cert.pem".to_string(),
-                ssl_certificate_key_dir: "./self-signed-certs/key.pem".to_string(),
+                ssl_certificate: "./self-signed-certs/cert.pem".to_string(),
+                ssl_certificate_key: "./self-signed-certs/key.pem".to_string(),
                 max_db_connections: 5,
                 db_connection_timeout_seconds: 3,
                 concurrency_limit: 1024,
