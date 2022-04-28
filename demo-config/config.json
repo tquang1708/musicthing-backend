@@ -3,10 +3,11 @@
     "frontend_url": "http://0.0.0.0:3000",
     "backend_socket_addr": "0.0.0.0:8000",
     "use_tls": true,
-    "max_db_connections": 5,
-    "db_connection_timeout_seconds": 3,
+    "certs_directory": "./self-signed-certs",
+    "max_db_connections": 20,
+    "db_connection_timeout_seconds": 5,
     "concurrency_limit": 1024,
-    "timeout_seconds": 60,
+    "timeout_seconds": 5,
     "music_directory": "../music",
     "art_directory": "./art"
 }
