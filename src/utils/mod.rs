@@ -21,6 +21,7 @@ pub struct Config {
     pub frontend_url: String,
     pub backend_socket_addr: String,
     pub use_tls: bool,
+    pub certs_directory: String,
     pub max_db_connections: u32,
     pub db_connection_timeout_seconds: u64,
     pub concurrency_limit: usize,
@@ -38,7 +39,8 @@ pub fn parse_cfg() -> Result<Config, BoxError> {
             // path found
             config = serde_json::from_reader(BufReader::new(File::open(path)?))?;
 
-            // expand music_directory and art_directory
+            // expand directories
+            config.certs_directory = shellexpand::full(&config.certs_directory)?.to_string();
             config.music_directory = shellexpand::full(&config.music_directory)?.to_string();
             config.art_directory = shellexpand::full(&config.art_directory)?.to_string();
         },
@@ -49,6 +51,7 @@ pub fn parse_cfg() -> Result<Config, BoxError> {
                 frontend_url: "http://0.0.0.0:3000".to_string(),
                 backend_socket_addr: "0.0.0.0:8000".to_string(),
                 use_tls: true,
+                certs_directory: "./self-signed-certs".to_string(),
                 max_db_connections: 5,
                 db_connection_timeout_seconds: 3,
                 concurrency_limit: 1024,

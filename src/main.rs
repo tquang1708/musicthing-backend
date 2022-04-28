@@ -115,8 +115,8 @@ async fn main() -> Result<(), BoxError> {
     if config.use_tls {
         // encrypt over tls to send over https
         // tls config
-        let cert = find_file("self-signed-certs/cert.pem")?;
-        let key = find_file("self-signed-certs/key.pem")?;
+        let cert = find_file(&format!("{}/cert.pem", config.certs_directory))?;
+        let key = find_file(&format!("{}/key.pem", config.certs_directory))?;
 
         // if any of cert or key is None, return early
         let tls_config = RustlsConfig::from_pem_file(
