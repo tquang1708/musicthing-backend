@@ -35,57 +35,6 @@
     },
     "query": "DELETE FROM track WHERE track_id = ($1)"
   },
-  "11cbeb9c12531ca706cd3dd59f49651a8c9b98c84979366c11b29d0fef406d33": {
-    "describe": {
-      "columns": [
-        {
-          "name": "track_no",
-          "ordinal": 0,
-          "type_info": "Int4"
-        },
-        {
-          "name": "artist_name",
-          "ordinal": 1,
-          "type_info": "Text"
-        },
-        {
-          "name": "track_name",
-          "ordinal": 2,
-          "type_info": "Text"
-        },
-        {
-          "name": "path",
-          "ordinal": 3,
-          "type_info": "Text"
-        },
-        {
-          "name": "art_path?",
-          "ordinal": 4,
-          "type_info": "Text"
-        },
-        {
-          "name": "length_seconds",
-          "ordinal": 5,
-          "type_info": "Int4"
-        }
-      ],
-      "nullable": [
-        true,
-        false,
-        false,
-        false,
-        false,
-        false
-      ],
-      "parameters": {
-        "Left": [
-          "Int4",
-          "Int4"
-        ]
-      }
-    },
-    "query": "SELECT track_no, artist_name, track_name, track.path as path, art.path as \"art_path?\", length_seconds FROM track\n                JOIN artist_track ON (track.track_id = artist_track.track_id)\n                JOIN artist ON (artist_track.artist_id = artist.artist_id)\n                JOIN album_track ON (track.track_id = album_track.track_id)\n                LEFT OUTER JOIN track_art ON (track_art.track_id = track.track_id)\n                LEFT OUTER JOIN art ON (track_art.art_id = art.art_id)\n                WHERE album_id = ($1) AND disc_no = ($2)\n                ORDER BY (track_no)"
-  },
   "1981a5d2c9350003748f19a1590186fa2ebbce0c30dacd0fed130ed8dbfe3006": {
     "describe": {
       "columns": [
@@ -164,6 +113,63 @@
       }
     },
     "query": "SELECT DISTINCT disc_no FROM album_track \n            WHERE album_id = ($1) ORDER BY (disc_no)"
+  },
+  "667e7af1ca296461a13f750487c6727646126a582f01f887b5371d4c8a26e0fe": {
+    "describe": {
+      "columns": [
+        {
+          "name": "track_id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "track_no",
+          "ordinal": 1,
+          "type_info": "Int4"
+        },
+        {
+          "name": "artist_name",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "track_name",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "path",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "art_path?",
+          "ordinal": 5,
+          "type_info": "Text"
+        },
+        {
+          "name": "length_seconds",
+          "ordinal": 6,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Int4"
+        ]
+      }
+    },
+    "query": "SELECT track.track_id as track_id, track_no, artist_name, track_name, track.path as path, art.path as \"art_path?\", length_seconds FROM track\n                JOIN artist_track ON (track.track_id = artist_track.track_id)\n                JOIN artist ON (artist_track.artist_id = artist.artist_id)\n                JOIN album_track ON (track.track_id = album_track.track_id)\n                LEFT OUTER JOIN track_art ON (track_art.track_id = track.track_id)\n                LEFT OUTER JOIN art ON (track_art.art_id = art.art_id)\n                WHERE album_id = ($1) AND disc_no = ($2)\n                ORDER BY (track_no)"
   },
   "8d0f026f999d966771c5eed454064708f7d824219e73477fa6ffbce34bf96d34": {
     "describe": {
