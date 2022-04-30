@@ -107,7 +107,11 @@ async fn clear_data(pool: PgPool, state: SharedState) -> Result<(), BoxError> {
         "artist_track",
         "album",
         "artist",
-        "track"
+        "track",
+        "art",
+        "track_art",
+        "artist_art",
+        "album_art",
     ];
 
     // iterate over tables then delete from them
