@@ -181,6 +181,28 @@ async fn update_old_metadata(pool: &PgPool, config: &Config, state: &SharedState
         }
     };
 
+    // get all empty albums and artists
+    let empty_albums = sqlx::query_scalar!("SELECT DISTINCT album.album_id AS album_id 
+        FROM album LEFT OUTER JOIN album_track ON album.album_id = album_track.album_id
+        WHERE album_track.track_id IS NULL")
+        .fetch_all(pool)
+        .await?;
+
+    let empty_artists = sqlx::query_scalar!("SELECT DISTINCT album.album_id AS album_id 
+        FROM album LEFT OUTER JOIN album_track ON album.album_id = album_track.album_id
+        WHERE album_track.track_id IS NULL")
+        .fetch_all(pool)
+        .await?;
+
+    // delete albums/artists with 0 tracks
+    for album_id in empty_albums.iter() {
+        delete_album(pool, *album_id).await?;
+    }
+
+    for artist_id in empty_artists.iter() {
+        delete_artist(pool, *artist_id).await?;
+    }
+
     // recreate cache
     state.write().await.album_cache = AlbumCache {
         list_album_cache_outdated: true,
@@ -384,6 +406,24 @@ async fn insert_artist_from_name(pool: &PgPool, name: &str) -> Result<i32, BoxEr
 async fn delete_track(pool: &PgPool, track_id: i32) -> Result<(), BoxError> {
     // delete the actual track record - should also delete other relations due to ON DELETE CASCADE
     sqlx::query!("DELETE FROM track WHERE track_id = ($1)", track_id)
+        .execute(pool)
+        .await?;
+    
+    Ok(())
+}
+
+// given an album id, remove the album's metadata from the db
+async fn delete_album(pool: &PgPool, album_id: i32) -> Result<(), BoxError> {
+    sqlx::query!("DELETE FROM album WHERE album_id = ($1)", album_id)
+        .execute(pool)
+        .await?;
+    
+    Ok(())
+}
+
+// given an artist id, remove the album's metadata from the db
+async fn delete_artist(pool: &PgPool, artist_id: i32) -> Result<(), BoxError> {
+    sqlx::query!("DELETE FROM artist WHERE artist_id = ($1)", artist_id)
         .execute(pool)
         .await?;
     
