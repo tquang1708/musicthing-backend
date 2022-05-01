@@ -1,7 +1,7 @@
 use std::{
     path::{Path, PathBuf},
     time::Duration,
-    fs::{File, read, read_dir},
+    fs::{File, DirEntry, read, read_dir},
     io::Write,
 };
 use sqlx::{
@@ -73,6 +73,9 @@ async fn parse_mp3(
     // get length
     let track_length = mp3_duration::from_path(path_full).unwrap_or(Duration::new(0, 0)).as_secs();
 
+    // get path
+    let path_str = path.to_string_lossy().to_string();
+
     Ok(
         match tag_optional {
             Some(tag) => {
@@ -101,7 +104,7 @@ async fn parse_mp3(
                 };
 
                 TrackInfo {
-                    track_name: tag.title().unwrap_or("Untitled").to_string(),
+                    track_name: tag.title().unwrap_or(&path_str).to_string(),
                     artist_name: tag.artist().unwrap_or("Unknown Artist").to_string(),
                     album_name: tag.album().unwrap_or("Unknown Album").to_string(),
                     album_artist_name: tag.album_artist().unwrap_or("Unknown Artist").to_string(),
@@ -115,7 +118,7 @@ async fn parse_mp3(
             },
             None => {
                 TrackInfo {
-                    track_name: String::from("Untitled"),
+                    track_name: path_str,
                     artist_name: String::from("Unknown Artist"),
                     album_name: String::from("Unknown Album"),
                     album_artist_name: String::from("Unknown Artist"),
@@ -140,6 +143,9 @@ async fn parse_flac(
 ) -> Result<TrackInfo, BoxError> {
     // get tag
     let tag_optional = metaflac::Tag::read_from_path(path_full).ok();
+
+    // get path
+    let path_str = path.to_string_lossy().to_string();
     
     Ok(
         match tag_optional {
@@ -180,7 +186,7 @@ async fn parse_flac(
                 match tag.vorbis_comments() {
                     Some(comment) => {
                         TrackInfo {
-                            track_name: comment.title().unwrap_or(&vec!["Untitled".to_string()]).join(", "),
+                            track_name: comment.title().unwrap_or(&vec![path_str]).join(", "),
                             artist_name: comment.artist().unwrap_or(&vec!["Unknown Artist".to_string()]).join(", "),
                             album_name: comment.album().unwrap_or(&vec!["Unknown Album".to_string()]).join(", "),
                             album_artist_name: comment.album_artist().unwrap_or(&vec!["Unknown Artist".to_string()]).join(", "),
@@ -194,7 +200,7 @@ async fn parse_flac(
                     },
                     None => {
                         TrackInfo {
-                            track_name: String::from("Untitled"),
+                            track_name: path_str,
                             artist_name: String::from("Unknown Artist"),
                             album_name: String::from("Unknown Album"),
                             album_artist_name: String::from("Unknown Artist"),
@@ -210,7 +216,7 @@ async fn parse_flac(
             },
             None => {
                 TrackInfo {
-                    track_name: String::from("Untitled"),
+                    track_name: path_str,
                     artist_name: String::from("Unknown Artist"),
                     album_name: String::from("Unknown Album"),
                     album_artist_name: String::from("Unknown Artist"),
@@ -231,12 +237,36 @@ fn get_picture_in_dir(path: &Path) -> Result<Option<PathBuf>, BoxError> {
     // get parent
     let parent = path.parent().unwrap(); // since this is called in parse_mp3/flac, this is guaranteed to not be a directory
 
-    // find first image
-    for dir in read_dir(parent)? {
-        let path = dir?.path();
-        if let Some(ext) = path.extension() {
-            if IMAGE_EXTENSIONS.iter().any(|i| i == &ext) {
-                return Ok(Some(path.to_path_buf()));
+    // generate common cover names
+    let common_names = [
+        "cover",
+        "folder",
+        "front",
+    ];
+    let common_filenames: Vec<String> = common_names.iter().flat_map(|i| {
+        return IMAGE_EXTENSIONS.iter().map(move |ext| format!{"{0}.{1}", i, ext});
+    }).collect();
+
+    // find first image with common file name
+    let dir_iter = read_dir(parent)?
+        .map(|dir| dir.ok()) // ignore unreadable files
+        .filter(|dir| dir.is_some()) // ignore nones
+        .map(|dir| dir.unwrap()); // should alwasy be unwrappable
+    let dir_with_common_filenames: Vec<DirEntry> = dir_iter
+        .filter(|d| common_filenames.contains(&d.file_name().to_string_lossy().to_lowercase())).collect();
+    match dir_with_common_filenames.get(0) {
+        Some(file_with_common_filename) => {
+            return Ok(Some(file_with_common_filename.path().to_path_buf()));
+        },
+        None => {
+            // else just find first image
+            for dir in read_dir(parent)? {
+                let path = dir?.path();
+                if let Some(ext) = path.extension() {
+                    if IMAGE_EXTENSIONS.iter().any(|i| i == &ext) {
+                        return Ok(Some(path.to_path_buf()));
+                    }
+                }
             }
         }
     }
