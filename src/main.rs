@@ -99,7 +99,7 @@ async fn main() -> Result<(), BoxError> {
                 .layer(HandleErrorLayer::new(handle_error))
                 .load_shed()
                 .concurrency_limit(config.concurrency_limit)
-                // .timeout(Duration::from_secs(config.timeout_seconds))
+                .timeout(Duration::from_secs(config.timeout_seconds))
                 .layer(TraceLayer::new_for_http())
                 .into_inner(),
         );
