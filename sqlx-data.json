@@ -35,6 +35,18 @@
     },
     "query": "DELETE FROM track WHERE track_id = ($1)"
   },
+  "14add1508345e778db2705510fb4b5ae6790dfc84c1c2f487819bfae0f93800d": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "DELETE FROM artist WHERE artist_id = ($1)"
+  },
   "1981a5d2c9350003748f19a1590186fa2ebbce0c30dacd0fed130ed8dbfe3006": {
     "describe": {
       "columns": [
@@ -113,6 +125,18 @@
       }
     },
     "query": "SELECT DISTINCT disc_no FROM album_track \n            WHERE album_id = ($1) ORDER BY (disc_no)"
+  },
+  "34bd83dd0b0d7895fbc7f7bfe6720f0e65a32a4a17bb97568d32591f0ed507af": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Int4"
+        ]
+      }
+    },
+    "query": "DELETE FROM album WHERE album_id = ($1)"
   },
   "667e7af1ca296461a13f750487c6727646126a582f01f887b5371d4c8a26e0fe": {
     "describe": {
@@ -246,6 +270,24 @@
       }
     },
     "query": "SELECT (artist_id) FROM artist WHERE artist_name = ($1)"
+  },
+  "9f554241d19997fc71e0e3de1622d65b3fe2d4f1e85d19b8531ca6dcabb6f909": {
+    "describe": {
+      "columns": [
+        {
+          "name": "album_id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": []
+      }
+    },
+    "query": "SELECT DISTINCT album.album_id AS album_id \n        FROM album LEFT OUTER JOIN album_track ON album.album_id = album_track.album_id\n        WHERE album_track.track_id IS NULL"
   },
   "a9ead52a200164be1cdffd05e48caf09bdc3e00b3473b468dd4db37db2e37b3b": {
     "describe": {
