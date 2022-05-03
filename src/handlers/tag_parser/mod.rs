@@ -4,6 +4,7 @@ use std::{
     fs::{File, DirEntry, read, read_dir},
     io::Write,
 };
+use itertools::Itertools;
 use sqlx::{
     types::time::PrimitiveDateTime,
     PgPool
@@ -13,8 +14,9 @@ use anyhow::{Context, Result};
 use tower::BoxError;
 
 use id3::TagLike;
-use metaflac;
 use mp3_duration;
+use metaflac;
+use mp4ameta;
 use crate::{
     handlers::IMAGE_EXTENSIONS,
     utils::Config
@@ -53,6 +55,9 @@ pub async fn parse_tag(pool: &PgPool, config: &Config, path: &Path) -> Result<Tr
         },
         Some("flac") => {
             parse_flac(pool, path, &path_full, last_modified, &config.art_directory).await
+        },
+        Some("m4a") => {
+            parse_m4a(pool, path, &path_full, last_modified, &config.art_directory).await
         },
         _ => {
             Err(format!("File at {0} has unsupported extension", path.to_string_lossy()))?
@@ -232,10 +237,88 @@ async fn parse_flac(
     )
 }
 
+async fn parse_m4a(
+    pool: &PgPool, 
+    path: &Path, 
+    path_full: &Path,
+    last_modified: PrimitiveDateTime,
+    art_dir: &str
+) -> Result<TrackInfo, BoxError> {
+    // get tag
+    let tag_optional = mp4ameta::Tag::read_from_path(path_full).ok();
+
+    // get path
+    let path_str = path.to_string_lossy().to_string();
+
+    Ok(
+        match tag_optional {
+            Some(tag) => {
+                // get picture
+                let mut art_id = None;
+                if let Some(art) = tag.artwork() {
+                    art_id = Some(get_art_id(art.data, pool, art_dir).await?);
+                }
+
+                // in case the track has no embedded cover find it in dir
+                if art_id.is_none() {
+                    // get image file in parent dir
+                    let picture = get_picture_in_dir(path_full)?;
+                    if let Some(picture_dir) = picture {
+                        art_id = Some(get_art_id(&read(picture_dir)?, pool, art_dir).await?);
+                    };
+                };
+
+                // get all artists and album artists
+                let artists;
+                if tag.artists().count() > 0 {
+                    artists = tag.artists().join(", ");
+                } else {
+                    artists = "Unknown Artist".to_string();
+                }
+
+                let album_artists;
+                if tag.album_artists().count() > 0 {
+                    album_artists = tag.album_artists().join(", ");
+                } else {
+                    album_artists = "Unknown Artist".to_string();
+                }
+
+                TrackInfo {
+                    track_name: tag.title().unwrap_or(&path_str).to_string(),
+                    artist_name: artists,
+                    album_name: tag.album().unwrap_or("Unknown Album").to_string(),
+                    album_artist_name: album_artists,
+                    track_number: tag.track_number().unwrap_or(0) as u32,
+                    disc_number: tag.disc_number().unwrap_or(0) as u32,
+                    length_seconds: tag.duration().unwrap_or(Duration::new(0,0)).as_secs(),
+                    art_id: art_id,
+                    path_str: path.to_string_lossy().to_string(),
+                    last_modified: last_modified,
+                }
+            },
+            None => {
+                TrackInfo {
+                    track_name: path_str,
+                    artist_name: String::from("Unknown Artist"),
+                    album_name: String::from("Unknown Album"),
+                    album_artist_name: String::from("Unknown Artist"),
+                    track_number: 0,
+                    disc_number: 0,
+                    length_seconds: 0,
+                    art_id: None,
+                    path_str: path.to_string_lossy().to_string(),
+                    last_modified: last_modified,
+                }
+            }             
+        }           
+    )
+}
+
+
 // get an image file in the current directory
 fn get_picture_in_dir(path: &Path) -> Result<Option<PathBuf>, BoxError> {
     // get parent
-    let parent = path.parent().unwrap(); // since this is called in parse_mp3/flac, this is guaranteed to not be a directory
+    let parent = path.parent().unwrap(); // since this is called in parse function, this is guaranteed to not be a directory
 
     // generate common cover names
     let common_names = [

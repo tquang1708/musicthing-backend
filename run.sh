@@ -12,7 +12,7 @@ case $option in
 
         echo "Creating default music directory at ../music"
         echo "The backend will pick up music files stored in here."
-        echo "Currently only supports .mp3/.flac"
+        echo "Currently only supports .mp3/.m4a/.flac"
         read -n1 -p "Proceed? (yY/nN)" default_music_dir
         echo
         case $default_music_dir in
