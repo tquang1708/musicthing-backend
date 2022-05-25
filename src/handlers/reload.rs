@@ -1,4 +1,5 @@
 use std::{
+    fs::{remove_dir_all, create_dir},
     path::Path,
     collections::HashMap
 };
@@ -80,7 +81,7 @@ pub async fn hard_reload_handler(
     let state_clone = state.clone();
     tokio::spawn(async move {
             // silently ignore error here for now
-            clear_data(pool.clone(), state_clone.clone()).await.expect("Panicked on clear_data in hard_reload");
+            clear_data(pool.clone(), config.clone(), state_clone.clone()).await.expect("Panicked on clear_data in hard_reload");
             load_db(pool.clone(), config.clone(), state_clone.clone()).await.expect("Panicked on load_data in hard_reload");
 
             // update state to say reload finished
@@ -99,7 +100,7 @@ pub async fn hard_reload_handler(
 }
 
 // wipe the database
-async fn clear_data(pool: PgPool, state: SharedState) -> Result<(), BoxError> {
+async fn clear_data(pool: PgPool, config: Config, state: SharedState) -> Result<(), BoxError> {
     // tables to clear from
     let tables = [
         "album_track",
@@ -120,6 +121,10 @@ async fn clear_data(pool: PgPool, state: SharedState) -> Result<(), BoxError> {
             .execute(&pool)
             .await?;
     };
+
+    // delete art folder then recreate empty art folder
+    remove_dir_all(&config.art_directory)?;
+    create_dir(&config.art_directory)?;
 
     // recreate cache
     state.write().await.album_cache = AlbumCache {
